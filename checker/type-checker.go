@@ -202,6 +202,7 @@ func (c *checker) Function(node *frontend.Node) (errors Errors) {
 		old_fn := c.fn
 		c.fn = f_type
 
+		c.syms.Put("self", f_type)
 		errors = append(errors, c.Stmts(block)...)
 		if len(errors) != 0 {
 			return errors

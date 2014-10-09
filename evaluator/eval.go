@@ -188,6 +188,7 @@ func (e *Evaluator) Call(node *frontend.Node) (value interface{}) {
 	for i, param_name := range callee.ParamNames() {
 		fne.syms.Put(param_name, params[i])
 	}
+	fne.syms.Put("self", callee)
 	values := fne.Stmts(callee_stmts)
 	ret := values[len(values)-1]
 	if _, retfn := callee.FnType().Returns.(*types.Function); retfn {
