@@ -1,0 +1,7 @@
+*.swp
+*.swo
+venv
+src
+pkg
+bin
+*.html
