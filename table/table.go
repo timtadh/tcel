@@ -2,6 +2,7 @@ package table
 
 import (
 	"fmt"
+	"strings"
 )
 
 type SymbolTable struct {
@@ -13,6 +14,14 @@ func NewSymbolTable() *SymbolTable {
 		symbols: make([]map[string]interface{}, 0, 10),
 	}
 	t.Push()
+	return t
+}
+
+func Copy(m map[string]interface{}) *SymbolTable {
+	t := NewSymbolTable()
+	for k, v := range m {
+		t.Put(k, v)
+	}
 	return t
 }
 
@@ -53,5 +62,24 @@ func (self *SymbolTable) TopHas(name string) bool {
 
 func (self *SymbolTable) Has(name string) bool {
 	return self.Get(name) != nil
+}
+
+func (self *SymbolTable) String() string {
+	m := self.Capture()
+	values := make([]string, 0, len(m))
+	for k,v := range m {
+		values = append(values, fmt.Sprintf("%v: %v", k, v))
+	}
+	return "{" + strings.Join(values, ", ") + "}"
+}
+
+func (self *SymbolTable) Capture() map[string]interface{} {
+	m := make(map[string]interface{})
+	for _, t := range self.symbols {
+		for k, v := range t {
+			m[k] = v
+		}
+	}
+	return m
 }
 

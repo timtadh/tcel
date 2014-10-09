@@ -104,7 +104,7 @@ func (self *Node) WellTyped() bool {
 }
 
 func (self *Node) String() string {
-	return self.Serialize(false)
+	return fmt.Sprintf("(Node %v %d)", self.Label, len(self.Children))
 }
 
 func (self *Node) Serialize(with_loc bool) string {

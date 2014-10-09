@@ -50,10 +50,10 @@ Factor -> NAME
 
 Function -> FN ( ParamDecls ) Type { Stmts }
 
-ParamDecls -> NAME Type ParaDecls'
+ParamDecls -> NAME Type ParamDecls'
             | e
 
-ParamDecls' -> , NAME NAME ParamDecls'
+ParamDecls' -> , NAME Type ParamDecls'
              | e
 
 Type -> NAME

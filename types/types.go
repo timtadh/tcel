@@ -15,6 +15,7 @@ type Primative string
 
 type Function struct {
 	Parameters []Type
+	ParamNames []string
 	Returns Type
 }
 
@@ -58,7 +59,7 @@ func (self *Function) Equals(o Type) bool {
 }
 
 func (self *Function) String() string {
-	params := make([]string, len(self.Parameters), 0)
+	params := make([]string, 0, len(self.Parameters))
 	for _, param := range self.Parameters {
 		params = append(params, param.String())
 	}

@@ -125,7 +125,7 @@ func (c *checker) Expr(node *frontend.Node) (errors Errors) {
 	case "Func":
 		errors = c.Function(node)
 	default:
-		errors = append(errors, fmt.Errorf("unsupported constant %s", node.Label))
+		errors = append(errors, fmt.Errorf("unexpected node %v", node))
 	}
 	return errors
 }
@@ -314,6 +314,8 @@ func (c *checker) ArithOp(node *frontend.Node) (errors Errors) {
 		}
 		if a.Type.Equals(types.String) && node.Label == "+" {
 			// ok
+		} else if a.Type.Equals(types.Float) && node.Label == "%" {
+			errors = append(errors, fmt.Errorf("type %v does not support % op", a))
 		} else if !matches(a.Type, types.Int, types.Float) {
 			errors = append(errors, fmt.Errorf("type %v does not support arith ops", a))
 		}

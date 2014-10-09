@@ -15,6 +15,7 @@ import (
 import (
 	"github.com/cwru-compilers/type-check-example/frontend"
 	"github.com/cwru-compilers/type-check-example/checker"
+	"github.com/cwru-compilers/type-check-example/evaluator"
 )
 
 var log *logpkg.Logger
@@ -49,8 +50,6 @@ func Usage(code int) {
     }
     os.Exit(code)
 }
-
-
 
 func write(X interface{String() string}, f io.Writer) {
 	f.Write([]byte(X.String()))
@@ -107,12 +106,11 @@ func lex(paths ... string) FilesTokens {
 }
 
 func parse(files FilesTokens) *frontend.Node {
-	/*
 	defer func() {
 		if e := recover(); e != nil {
 			log.Fatal(e)
 		}
-	}()*/
+	}()
 	var A *frontend.Node = nil
 	for _, file := range files {
 		log.Println("> parsing", file.Filename)
@@ -142,6 +140,15 @@ func typecheck(node *frontend.Node) *frontend.Node {
 		log.Fatal(err)
 	}
 	return node
+}
+
+func eval(node *frontend.Node) []interface{} {
+	log.Print("> evaluating")
+	values, err := evaluator.Evaluate(node)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return values
 }
 
 func main() {
@@ -197,18 +204,24 @@ func main() {
 	L := lex(args...)
 	if stop_at == "lex" {
 		write(L, ouf)
+		return
 	}
 
 	A := parse(L)
 	if stop_at == "ast" {
-		write(A, ouf)
+		ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(true))))
 		return
 	}
 
 	T := typecheck(A)
 	if stop_at == "typed-ast" {
-		write(T, ouf)
+		ouf.Write([]byte(fmt.Sprintf("%v\n", T.Serialize(false))))
 		return
+	}
+
+	values := eval(T)
+	for _, value := range values {
+		ouf.Write([]byte(fmt.Sprintf("%v\n", value)))
 	}
 }
 

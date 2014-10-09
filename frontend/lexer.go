@@ -106,7 +106,7 @@ func Lexer(text, filename string) (*lex.Scanner, error) {
 			if err != nil {
 				return nil, err
 			}
-			return NewToken(TokMap["INT"], i, match, ctx.Filename), nil
+			return NewToken(TokMap["INT"], int64(i), match, ctx.Filename), nil
 		},
 	)
 	lexer.Add(
@@ -116,7 +116,7 @@ func Lexer(text, filename string) (*lex.Scanner, error) {
 			if err != nil {
 				return nil, err
 			}
-			return NewToken(TokMap["FLOAT"], f, match, ctx.Filename), nil
+			return NewToken(TokMap["FLOAT"], float64(f), match, ctx.Filename), nil
 		},
 	)
 	lexer.Add(
