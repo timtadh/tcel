@@ -32,7 +32,7 @@ func NewToken(token int, value interface{}, match *machines.Match, filename stri
 }
 
 func (self *Token) String() string {
-	return fmt.Sprintf("%v %-6v %v", self.Filename, Tokens[self.Token.Type], self.Token.String())
+	return fmt.Sprintf("'%v' <%v %v>", Tokens[self.Token.Type], self.Token.String(), self.Filename)
 }
 
 var Literals []string
