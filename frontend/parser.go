@@ -46,7 +46,13 @@ Factor -> NAME
         | FLOAT
         | STRING
         | Function
+        | If
         | ( Expr )
+
+If -> IF BooleanExpr { Stmts } ELSE IfElse
+
+IfElse -> { Stmts }
+        | If
 
 Function -> FN ( ParamDecls ) Type { Stmts }
 
@@ -65,6 +71,42 @@ TypeParams -> Type TypeParams'
 TypeParams' -> , Type TypeParms'
              | e
 
+BooleanExpr : AndExpr BooleanExpr*
+            ;
+
+BooleanExpr* : "|" "|" AndExpr BooleanExpr*
+             | e
+             ;
+
+AndExpr : NotExpr AndExpr*
+        ;
+
+AndExpr* : "&" "&" NotExpr AndExpr*
+         | e
+         ;
+
+NotExpr : "!" BooleanTerm
+        | BooleanTerm
+        ;
+
+BooleanTerm : CmpExpr
+            | BooleanConstant
+            | "(" BooleanExpr ")"
+            ;
+
+CmpExpr : ArithExpr CmpOp ArithExpr ;
+
+CmpOp : "<"
+      | "<" "="
+      | "=" "="
+      | "!" "="
+      | ">" "="
+      | ">"
+      ;
+
+BooleanConstant : true
+                | false
+                ;
 */
 
 func Parse(tokens []*Token) (root *Node, err error) {
@@ -73,7 +115,9 @@ func Parse(tokens []*Token) (root *Node, err error) {
 	var (
 		Stmts, Stmt, Assign, Expr, Expr_, Term, Term_,
 		Unary, PostUnary, Factor, Applies, Applies_, Params, Params_,
-		Function, ParamDecls, ParamDecls_, Type, TypeParams, TypeParams_ Consumer
+		Function, ParamDecls, ParamDecls_, Type, TypeParams, TypeParams_,
+		If, IfElse, BooleanExpr, BooleanExpr_, AndExpr, AndExpr_,
+		NotExpr, BooleanTerm, CmpExpr, BooleanConstant, CmpOp Consumer
 		Epsilon func(*Node) Consumer
 		Consume func(string) Consumer
 		Concat func(...Consumer) func(func(...*Node)(*Node, error)) Consumer
@@ -241,7 +285,10 @@ func Parse(tokens []*Token) (root *Node, err error) {
 					Consume("STRING"),
 				),
 				Alt(
-					Function,
+					Alt(
+						Function,
+						If,
+					),
 					Concat(Consume("("), Expr, Consume(")"))(
 						func (nodes ...*Node) (*Node, error) {
 							return nodes[1], nil
@@ -331,6 +378,95 @@ func Parse(tokens []*Token) (root *Node, err error) {
 				}),
 			Epsilon(nil),
 		)(i)
+	}
+
+	If = func(i int) (int, *Node, error) {
+		return Concat(
+			Consume("IF"), BooleanExpr, Consume("{"), Stmts, Consume("}"),
+			Consume("ELSE"), IfElse)(
+				func (nodes ...*Node) (*Node, error) {
+					n := NewNode("If").AddKid(nodes[1]).AddKid(nodes[3]).AddKid(nodes[6])
+					return n, nil
+				})(i)
+	}
+
+	IfElse = func(i int) (int, *Node, error) {
+		return Alt(
+			Concat(Consume("{"), Stmts, Consume("}")) (
+				func (nodes ...*Node) (*Node, error) {
+					return nodes[1], nil
+				}),
+			If,
+		)(i)
+	}
+
+	BooleanExpr = func(i int) (int, *Node, error) {
+		return Concat(AndExpr, BooleanExpr_)(
+			func (nodes ...*Node) (*Node, error) {
+				return collapse(nodes[0], nodes[1]), nil
+			})(i)
+	}
+
+	BooleanExpr_ = func(i int) (int, *Node, error) {
+		return Alt(
+			Concat(Consume("||"), AndExpr, BooleanExpr_)(swing),
+			Epsilon(nil),
+		)(i)
+	}
+
+	AndExpr = func(i int) (int, *Node, error) {
+		return Concat(NotExpr, AndExpr_)(
+			func (nodes ...*Node) (*Node, error) {
+				return collapse(nodes[0], nodes[1]), nil
+			})(i)
+	}
+
+	AndExpr_ = func(i int) (int, *Node, error) {
+		return Alt(
+			Concat(Consume("&&"), NotExpr, AndExpr_)(swing),
+			Epsilon(nil),
+		)(i)
+	}
+
+	NotExpr = func(i int) (int, *Node, error) {
+		return Alt(
+			Concat(Consume("!"), BooleanTerm)(
+				func (nodes ...*Node) (*Node, error) {
+					return NewNode("!").AddKid(nodes[1]), nil
+				}),
+			BooleanTerm,
+		)(i)
+	}
+
+	BooleanTerm = func(i int) (int, *Node, error) {
+		return Alt(
+			Alt(CmpExpr, BooleanConstant),
+			Concat(Consume("("), BooleanExpr, Consume(")"))(
+				func (nodes ...*Node) (*Node, error) {
+					return nodes[1], nil
+				}),
+		)(i)
+	}
+
+	CmpExpr = func(i int) (int, *Node, error) {
+		return Concat(Expr, CmpOp, Expr)(
+			func (nodes ...*Node) (*Node, error) {
+				return nodes[1].AddKid(nodes[0]).AddKid(nodes[2]), nil
+			})(i)
+	}
+
+	CmpOp = func(i int) (int, *Node, error) {
+		return Alt(
+			Alt(Consume("<"), Consume("<=")),
+			Alt(
+				Alt(Consume("=="), Consume("!=")),
+				Alt(Consume(">"), Consume(">=")),
+			),
+		)(i)
+	}
+
+	BooleanConstant = func(i int) (int, *Node, error) {
+		return Alt(Consume("TRUE"), Consume("FALSE"))(i)
 	}
 
 	Epsilon = func(n *Node) Consumer {
