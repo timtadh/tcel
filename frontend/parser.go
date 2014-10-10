@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"fmt"
+	"sync"
 )
 
 /*
@@ -121,7 +122,7 @@ func Parse(tokens []*Token) (root *Node, err error) {
 		Epsilon func(*Node) Consumer
 		Consume func(string) Consumer
 		Concat func(...Consumer) func(func(...*Node)(*Node, error)) Consumer
-		Alt func(Consumer, Consumer) Consumer
+		Alt func(... Consumer) Consumer
 	)
 
 	collapse := func(subtree, extra *Node) *Node {
@@ -171,10 +172,8 @@ func Parse(tokens []*Token) (root *Node, err error) {
 
 	Expr_ = func(i int) (int, *Node, error) {
 		return Alt(
-			Alt(
-				Concat(Consume("+"), Term, Expr_)(swing),
-				Concat(Consume("-"), Term, Expr_)(swing),
-			),
+			Concat(Consume("+"), Term, Expr_)(swing),
+			Concat(Consume("-"), Term, Expr_)(swing),
 			Epsilon(nil),
 		)(i)
 	}
@@ -188,14 +187,10 @@ func Parse(tokens []*Token) (root *Node, err error) {
 
 	Term_ = func(i int) (int, *Node, error) {
 		return Alt(
-			Alt(
-				Concat(Consume("*"), Unary, Term_)(swing),
-				Concat(Consume("/"), Unary, Term_)(swing),
-			),
-			Alt(
-				Concat(Consume("%"), Unary, Term_)(swing),
-				Epsilon(nil),
-			),
+			Concat(Consume("*"), Unary, Term_)(swing),
+			Concat(Consume("/"), Unary, Term_)(swing),
+			Concat(Consume("%"), Unary, Term_)(swing),
+			Epsilon(nil),
 		)(i)
 	}
 
@@ -275,26 +270,16 @@ func Parse(tokens []*Token) (root *Node, err error) {
 
 	Factor = func(i int) (int, *Node, error) {
 		return Alt(
-			Alt(
-				Consume("NAME"),
-				Consume("INT"),
-			),
-			Alt(
-				Alt(
-					Consume("FLOAT"),
-					Consume("STRING"),
-				),
-				Alt(
-					Alt(
-						Function,
-						If,
-					),
-					Concat(Consume("("), Expr, Consume(")"))(
-						func (nodes ...*Node) (*Node, error) {
-							return nodes[1], nil
-						}),
-				),
-			),
+			Consume("NAME"),
+			Consume("INT"),
+			Consume("FLOAT"),
+			Consume("STRING"),
+			Function,
+			If,
+			Concat(Consume("("), Expr, Consume(")"))(
+				func (nodes ...*Node) (*Node, error) {
+					return nodes[1], nil
+				}),
 		)(i)
 	}
 
@@ -460,11 +445,9 @@ func Parse(tokens []*Token) (root *Node, err error) {
 
 	CmpOp = func(i int) (int, *Node, error) {
 		return Alt(
-			Alt(Consume("<"), Consume("<=")),
-			Alt(
-				Alt(Consume("=="), Consume("!=")),
-				Alt(Consume(">"), Consume(">=")),
-			),
+			Consume("<"), Consume("<="),
+			Consume("=="), Consume("!="),
+			Consume(">"), Consume(">="),
 		)(i)
 	}
 
@@ -502,21 +485,46 @@ func Parse(tokens []*Token) (root *Node, err error) {
 		}
 	}
 
-	Alt = func(a, b Consumer) Consumer {
+	Alt = func(consumers ...Consumer) Consumer {
 		return func(i int) (int, *Node, error) {
-			j, na, err_a := a(i)
-			k, nb, err_b := b(i)
-			if err_a == nil && err_b == nil {
-				if j >= k {
-					return j, na, nil
-				}
-				return k, nb, nil
-			} else if err_a == nil {
-				return j, na, nil
-			} else if err_b == nil {
-				return k, nb, nil
+			type ret struct {
+				j int
+				n *Node
+				e error
 			}
-			return i, nil, fmt.Errorf("%v, %v", err_a, err_b)
+			var wg sync.WaitGroup
+			results := make(chan *ret)
+			wg.Add(len(consumers))
+			for _, c := range consumers {
+				go func(c Consumer) {
+					j, n, err := c(i)
+					results <- &ret{j, n, err}
+					wg.Done()
+				}(c)
+			}
+			go func() {
+				wg.Wait()
+				close(results)
+			}()
+
+			var winner *ret
+			var err error = fmt.Errorf("")
+			for res := range results {
+				if res.e == nil {
+					if winner == nil {
+						winner = res
+					} else if winner.j < res.j {
+						winner = res
+					}
+				} else {
+					err = fmt.Errorf("%v\n%v", res.e, err)
+				}
+			}
+
+			if winner == nil {
+				return i, nil, err
+			}
+			return winner.j, winner.n, nil
 		}
 	}
 
