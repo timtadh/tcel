@@ -157,8 +157,45 @@ func (e *Evaluator) Expr(node *frontend.Node) (value interface{}) {
 		return (*function)(node)
 	case "Params":
 		return e.Params(node)
+	case "If":
+		return e.If(node)
 	default:
 		panic(fmt.Errorf("unexpected node %v", node))
+	}
+}
+
+func (e *Evaluator) BooleanExpr(node *frontend.Node) (bool) {
+	switch node.Label {
+	case "TRUE", "FALSE":
+		return e.BooleanConstant(node)
+	case "<", "<=", "==", "!=", ">=", ">":
+		return e.CmpOp(node)
+	case "||":
+		return e.Or(node)
+	case "&&":
+		return e.And(node)
+	case "!":
+		return e.Not(node)
+	default:
+		panic(fmt.Errorf("unexpected node %v", node))
+	}
+}
+
+func (e *Evaluator) If(node *frontend.Node) (value interface{}) {
+	condition := node.Get(0)
+	then := node.Get(1)
+	otherwise := node.Get(2)
+
+	if e.BooleanExpr(condition) {
+		e.Push()
+		values := e.Stmts(then)
+		e.Pop()
+		return values[len(values)-1]
+	} else {
+		e.Push()
+		values := e.Stmts(otherwise)
+		e.Pop()
+		return values[len(values)-1]
 	}
 }
 
@@ -259,3 +296,78 @@ func (e *Evaluator) StringArithOp(op string, a, b string) (string) {
 	}
 	panic(fmt.Errorf("Unsupported op %v for strings", op))
 }
+
+
+func (e *Evaluator) Or(node *frontend.Node) (bool) {
+	if e.BooleanExpr(node.Get(0)) {
+		return true
+	}
+	return e.BooleanExpr(node.Get(1))
+}
+
+func (e *Evaluator) And(node *frontend.Node) (bool) {
+	if e.BooleanExpr(node.Get(0)) {
+		return e.BooleanExpr(node.Get(1))
+	}
+	return false
+}
+
+func (e *Evaluator) Not(node *frontend.Node) (bool) {
+	return !e.BooleanExpr(node.Children[0])
+}
+
+func (e *Evaluator) CmpOp(node *frontend.Node) (bool) {
+	a := e.Expr(node.Get(0))
+	b := e.Expr(node.Get(1))
+	switch node.Get(0).Type.String() {
+	case "int": return e.IntCmpOp(node.Label, a.(int64), b.(int64))
+	case "float": return e.FloatCmpOp(node.Label, a.(float64), b.(float64))
+	case "string": return e.StringCmpOp(node.Label, a.(string), b.(string))
+	}
+	panic(fmt.Errorf("unexpected node type in arith op %v", node))
+}
+
+func (e *Evaluator) IntCmpOp(op string, a, b int64) (bool) {
+	switch op {
+	case "<": return a < b
+	case "<=": return a <= b
+	case "==": return a == b
+	case "!=": return a != b
+	case ">=": return a >= b
+	case ">": return a > b
+	}
+	panic(fmt.Errorf("unexpected op in cmp op %v", op))
+}
+
+func (e *Evaluator) FloatCmpOp(op string, a, b float64) (bool) {
+	switch op {
+	case "<": return a < b
+	case "<=": return a <= b
+	case "==": return a == b
+	case "!=": return a != b
+	case ">=": return a >= b
+	case ">": return a > b
+	}
+	panic(fmt.Errorf("unexpected op in cmp op %v", op))
+}
+
+func (e *Evaluator) StringCmpOp(op string, a, b string) (bool) {
+	switch op {
+	case "<": return a < b
+	case "<=": return a <= b
+	case "==": return a == b
+	case "!=": return a != b
+	case ">=": return a >= b
+	case ">": return a > b
+	}
+	panic(fmt.Errorf("unexpected op in cmp op %v", op))
+}
+
+func (e *Evaluator) BooleanConstant(node *frontend.Node) (bool) {
+	if node.Label == "TRUE" {
+		return true
+	}
+	return false
+}
+
+
