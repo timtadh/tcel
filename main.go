@@ -5,6 +5,7 @@ import (
 	"io"
 	"fmt"
 	"io/ioutil"
+	"runtime"
 	logpkg "log"
 )
 
@@ -22,6 +23,7 @@ var log *logpkg.Logger
 
 func init() {
 	log = logpkg.New(os.Stderr, "", 0)
+	runtime.GOMAXPROCS(4)
 }
 
 
@@ -73,11 +75,12 @@ func (self FilesTokens) String() string {
 }
 
 func lex(paths ... string) FilesTokens {
+	/*
 	defer func() {
 		if e := recover(); e != nil {
 			log.Fatal(e)
 		}
-	}()
+	}()*/
 	var files []*FileTokens
 	for _, path := range paths {
 		log.Print("> lexing ", path)
@@ -106,11 +109,12 @@ func lex(paths ... string) FilesTokens {
 }
 
 func parse(files FilesTokens) *frontend.Node {
+	/*
 	defer func() {
 		if e := recover(); e != nil {
 			log.Fatal(e)
 		}
-	}()
+	}()*/
 	var A *frontend.Node = nil
 	for _, file := range files {
 		log.Println("> parsing", file.Filename)
@@ -209,7 +213,7 @@ func main() {
 
 	A := parse(L)
 	if stop_at == "ast" {
-		ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(true))))
+		ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(false))))
 		return
 	}
 

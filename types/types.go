@@ -15,8 +15,12 @@ type Primative string
 
 type Function struct {
 	Parameters []Type
-	ParamNames []string
 	Returns Type
+}
+
+type Array struct {
+	Length uint
+	Base Type
 }
 
 var Unit Primative = "unit"

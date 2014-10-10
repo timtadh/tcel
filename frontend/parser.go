@@ -185,6 +185,8 @@ func Parse(tokens []*Token) (*Node, error) {
 		Alt func(... Consumer) Consumer
 	)
 
+	var top_err *ParseError = nil
+
 	collapse := func(subtree, extra *Node) *Node {
 		if extra == nil {
 			return subtree
@@ -268,7 +270,7 @@ func Parse(tokens []*Token) (*Node, error) {
 		return Alt(
 			Concat(Factor, Applies)(
 				func (nodes ...*Node) (*Node, *ParseError) {
-					return nodes[1].AddLeftMostKid(nodes[0], "Call"), nil
+					return nodes[1].AddLeftMostKid(nodes[0], "Call", "Index"), nil
 				}),
 			Factor,
 		)(i)
@@ -280,7 +282,7 @@ func Parse(tokens []*Token) (*Node, error) {
 				return NewNode(name).AddKid(nodes[0]), nil
 			}
 			root := nodes[1]
-			root.AddLeftMostKid(NewNode(name).AddKid(nodes[0]), name)
+			root.AddLeftMostKid(NewNode(name).AddKid(nodes[0]), "Call", "Index")
 			return root, nil
 		}
 	}
@@ -308,7 +310,7 @@ func Parse(tokens []*Token) (*Node, error) {
 	}
 
 	Index = func(i int) (int, *Node, *ParseError) {
-		return Concat(Consume("["), Params, Consume("]"))(
+		return Concat(Consume("["), Expr, Consume("]"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				return nodes[1], nil
 			})(i)
@@ -559,59 +561,8 @@ func Parse(tokens []*Token) (*Node, error) {
 		}
 	}
 
-
-	/*
 	Alt = func(consumers ...Consumer) Consumer {
 		return func(i int) (int, *Node, *ParseError) {
-			type ret struct {
-				j int
-				n *Node
-				e *ParseError
-			}
-			var wg sync.WaitGroup
-			results := make(chan *ret)
-			wg.Add(len(consumers))
-			for _, c := range consumers {
-				go func(c Consumer) {
-					j, n, err := c(i)
-					results <- &ret{j, n, err}
-					wg.Done()
-				}(c)
-			}
-			go func() {
-				wg.Wait()
-				close(results)
-			}()
-
-			var winner *ret
-			var err *ParseError = fmt.Errorf("")
-			for res := range results {
-				if res.e == nil {
-					if winner == nil {
-						winner = res
-					} else if winner.j < res.j {
-						winner = res
-					}
-				} else {
-					err = fmt.Errorf("%v\n%v", res.e, err)
-				}
-			}
-
-			if winner == nil {
-				return i, nil, err
-			}
-			return winner.j, winner.n, nil
-		}
-	}*/
-
-	Alt = func(consumers ...Consumer) Consumer {
-		return func(i int) (int, *Node, *ParseError) {
-			
-			type ret struct {
-				j int
-				n *Node
-			}
-
 			var err *ParseError = nil
 			for _, c := range consumers {
 				j, n, e := c(i)
@@ -620,6 +571,9 @@ func Parse(tokens []*Token) (*Node, error) {
 				} else if err == nil || err.Less(e) {
 					err = e
 				}
+			}
+			if top_err == nil || top_err.Less(err) {
+				top_err = err
 			}
 			return i, nil, err
 		}
@@ -646,7 +600,7 @@ func Parse(tokens []*Token) (*Node, error) {
 	}
 
 	if len(tokens) != i {
-		return nil, fmt.Errorf("Unconsumed input, %v", tokens[i:len(tokens)])
+		return nil, top_err
 	}
 	return node, nil
 }
