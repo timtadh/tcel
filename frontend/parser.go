@@ -94,7 +94,7 @@ BooleanTerm : CmpExpr
             | "(" BooleanExpr ")"
             ;
 
-CmpExpr : ArithExpr CmpOp ArithExpr ;
+CmpExpr : Expr CmpOp Expr ;
 
 CmpOp : "<"
       | "<" "="
@@ -396,7 +396,10 @@ func Parse(tokens []*Token) (root *Node, err error) {
 				func (nodes ...*Node) (*Node, error) {
 					return nodes[1], nil
 				}),
-			If,
+			Concat(If)(
+				func (nodes ...*Node) (*Node, error) {
+					return NewNode("Stmts").AddKid(nodes[0]), nil
+				}),
 		)(i)
 	}
 

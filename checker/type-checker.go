@@ -124,6 +124,26 @@ func (c *checker) Expr(node *frontend.Node) (errors Errors) {
 		errors = c.Call(node)
 	case "Func":
 		errors = c.Function(node)
+	case "If":
+		errors = c.If(node)
+	default:
+		errors = append(errors, fmt.Errorf("unexpected node %v", node))
+	}
+	return errors
+}
+
+func (c *checker) BooleanExpr(node *frontend.Node) (errors Errors) {
+	switch node.Label {
+	case "TRUE", "FALSE":
+		errors = c.BooleanConstant(node)
+	case "<", "<=", "==", "!=", ">=", ">":
+		errors = c.CmpOp(node)
+	case "||":
+		errors = c.Or(node)
+	case "&&":
+		errors = c.And(node)
+	case "!":
+		errors = c.Not(node)
 	default:
 		errors = append(errors, fmt.Errorf("unexpected node %v", node))
 	}
@@ -182,6 +202,7 @@ func (c *checker) Function(node *frontend.Node) (errors Errors) {
 	block := node.Get(2)
 
 	c.Push()
+	defer c.Pop()
 
 	param_types, err := c.ParamDecls(params)
 	if err != nil {
@@ -219,7 +240,36 @@ func (c *checker) Function(node *frontend.Node) (errors Errors) {
 			node.Type = f_type
 		}
 	}
+	return errors
+}
+
+func (c *checker) If(node *frontend.Node) (errors Errors) {
+	condition := node.Get(0)
+	then := node.Get(1)
+	otherwise := node.Get(2)
+
+	errors = append(errors, c.BooleanExpr(condition)...)
+	c.Push()
+	errors = append(errors, c.Stmts(then)...)
 	c.Pop()
+	c.Push()
+	errors = append(errors, c.Stmts(otherwise)...)
+	c.Pop()
+
+
+	if len(errors) != 0 {
+		return errors
+	}
+
+	then.Type = then.Get(-1).Type
+	otherwise.Type = otherwise.Get(-1).Type
+
+	if !then.Type.Equals(otherwise.Type) {
+		return append(errors, fmt.Errorf("Branches of if expression do not agree in types. %v", node.Serialize(true)))
+	}
+
+	node.Type = then.Type
+
 	return errors
 }
 
@@ -338,4 +388,70 @@ func (c *checker) UnaryOp(node *frontend.Node) (errors Errors) {
 	}
 	return errors
 }
+
+func (c *checker) Or(node *frontend.Node) (errors Errors) {
+	return c.AndOr(node)
+}
+
+func (c *checker) And(node *frontend.Node) (errors Errors) {
+	return c.AndOr(node)
+}
+
+func (c *checker) AndOr(node *frontend.Node) (errors Errors) {
+	a := node.Children[0]
+	b := node.Children[1]
+	errors = append(errors, c.BooleanExpr(a)...)
+	errors = append(errors, c.BooleanExpr(b)...)
+	if len(errors) == 0 {
+		if !a.Type.Equals(b.Type) {
+			errors = append(errors, fmt.Errorf("a, %v, does not agree with b, %v, in types", a, b))
+		}
+		if !matches(a.Type, types.Boolean) {
+			errors = append(errors, fmt.Errorf("type %v does not support boolean ops", a))
+		}
+	}
+	if len(errors) == 0 {
+		node.Type = types.Boolean
+	}
+	return errors
+}
+
+func (c *checker) Not(node *frontend.Node) (errors Errors) {
+	a := node.Children[0]
+	errors = append(errors, c.BooleanExpr(a)...)
+	if len(errors) == 0 {
+		if !matches(a.Type, types.Boolean) {
+			errors = append(errors, fmt.Errorf("type %v does not support boolean ops", a))
+		}
+	}
+	if len(errors) == 0 {
+		node.Type = types.Boolean
+	}
+	return errors
+}
+
+func (c *checker) CmpOp(node *frontend.Node) (errors Errors) {
+	a := node.Children[0]
+	b := node.Children[1]
+	errors = append(errors, c.Expr(a)...)
+	errors = append(errors, c.Expr(b)...)
+	if len(errors) == 0 {
+		if !a.Type.Equals(b.Type) {
+			errors = append(errors, fmt.Errorf("a, %v, does not agree with b, %v, in types", a, b))
+		}
+		if !matches(a.Type, types.Int, types.Float) {
+			errors = append(errors, fmt.Errorf("type %v does not support boolean comparison ops", a))
+		}
+	}
+	if len(errors) == 0 {
+		node.Type = types.Boolean
+	}
+	return errors
+}
+
+func (c *checker) BooleanConstant(node *frontend.Node) (errors Errors) {
+	node.Type = types.Boolean
+	return errors
+}
+
 

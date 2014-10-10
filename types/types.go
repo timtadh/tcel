@@ -23,9 +23,10 @@ var Unit Primative = "unit"
 var String Primative = "string"
 var Float Primative = "float"
 var Int Primative = "int"
+var Boolean Primative = "boolean"
 
 var Primatives []Primative = []Primative{
-	Unit, String, Float, Int,
+	Unit, String, Float, Int, Boolean,
 }
 
 func (self Primative) String() string {
