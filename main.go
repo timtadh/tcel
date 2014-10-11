@@ -14,9 +14,9 @@ import (
 )
 
 import (
-	"github.com/cwru-compilers/type-check-example/frontend"
-	"github.com/cwru-compilers/type-check-example/checker"
-	"github.com/cwru-compilers/type-check-example/evaluator"
+	"github.com/timtadh/tcel/frontend"
+	"github.com/timtadh/tcel/checker"
+	"github.com/timtadh/tcel/evaluator"
 )
 
 var log *logpkg.Logger
@@ -27,7 +27,7 @@ func init() {
 }
 
 
-var UsageMessage string = "type-check-example -o <path> <input>+ "
+var UsageMessage string = "tcel -o <path> <input>+ "
 var ExtendedMessage string = `
 
 Options

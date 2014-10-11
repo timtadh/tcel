@@ -6,9 +6,9 @@ import (
 )
 
 import (
-	"github.com/cwru-compilers/type-check-example/frontend"
-	"github.com/cwru-compilers/type-check-example/types"
-	"github.com/cwru-compilers/type-check-example/table"
+	"github.com/timtadh/tcel/frontend"
+	"github.com/timtadh/tcel/types"
+	"github.com/timtadh/tcel/table"
 )
 
 type Errors []error

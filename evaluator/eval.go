@@ -5,9 +5,9 @@ import (
 )
 
 import (
-	"github.com/cwru-compilers/type-check-example/frontend"
-	"github.com/cwru-compilers/type-check-example/types"
-	"github.com/cwru-compilers/type-check-example/table"
+	"github.com/timtadh/tcel/frontend"
+	"github.com/timtadh/tcel/types"
+	"github.com/timtadh/tcel/table"
 )
 
 func Evaluate(node *frontend.Node) (values []interface{}, err error) {

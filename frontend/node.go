@@ -6,7 +6,7 @@ import (
 )
 
 import (
-	"github.com/cwru-compilers/type-check-example/types"
+	"github.com/timtadh/tcel/types"
 )
 
 type SourceLocation struct {
