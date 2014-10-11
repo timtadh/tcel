@@ -1,11 +1,18 @@
 # TCEL - A Language
 
-This is a simple language with a type checker. It is an interpreted language
+By Tim Henderson (tadh@case.edu)
+
+This is a simple language with a static type checker. It is an interpreted
 expression oriented functional language.  Which features:
 
-	- First class functions
-	- Closures
-	- Integers, floats, strings
+- First class functions
+- Closures
+- Integers, floats, strings, booleans
+- Conditional expressions
+
+This language is evolving fast and may have undocumented features or bugs. It
+started out as an example I wrote for the compilers class I teach, EECS 337
+Compiler Design, at Case Western Reserve University.
 
 #### Running:
 
@@ -18,17 +25,17 @@ expression oriented functional language.  Which features:
 
 ```
 add = fn(x int) fn(int) int {
-	fn(y int) int {
-		x + y
-	}
+    fn(y int) int {
+        x + y
+    }
 }
 
 fib = fn(i int) int {
-	if i <= 1 {
-		1
-	} else {
-		add(self(i-1))(self(i-2))
-	}
+    if i <= 1 {
+        1
+    } else {
+        add(self(i-1))(self(i-2))
+    }
 }
 
 fib(0)
