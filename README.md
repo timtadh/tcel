@@ -1,4 +1,4 @@
-# Simple Language with a Type Checker
+# TCEL - A Language
 
 This is a simple language with a type checker. It is an interpreted language
 expression oriented functional language.  Which features:
