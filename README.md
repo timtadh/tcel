@@ -9,12 +9,12 @@ expression oriented functional language.  Which features:
 
 #### Running:
 
-    $ go get github.com/cwru-compilers/type-check-example
-    $ type-check-example -T ./ex/simple.x
+    $ go get github.com/timtadh/tcel
+    $ tcel ./ex/fib.x
 
 #### Example Computing the Fibonacci Sequence
 
-**file**  `./ex/ex3.x`
+**file**  `./ex/fib.x`
 
 ```
 add = fn(x int) fn(int) int {
@@ -41,9 +41,9 @@ fib(6)
 ```
 
 ```
-$ ./bin/type-check-example ex/ex3.x 
-> lexing ex/ex3.x
-> parsing ex/ex3.x
+$ tcel ex/fib.x 
+> lexing ex/fib.x
+> parsing ex/fib.x
 > type checking
 > evaluating
 unit
