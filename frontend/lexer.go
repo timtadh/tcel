@@ -3,6 +3,7 @@ package frontend
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 import (
@@ -55,7 +56,7 @@ func init() {
 		"%",
 		",",
 		"&&",
-		"|\\|",
+		"||",
 		"!",
 		"<",
 		"<=",
@@ -109,7 +110,8 @@ func Lexer(text, filename string) (*lex.Scanner, error) {
 	lexer := lex.NewLexer()
 
 	for _, lit := range Literals {
-		lexer.Add([]byte("\\"+lit), ctx.Literal)
+		r := "\\" + strings.Join(strings.Split(lit, ""), "\\")
+		lexer.Add([]byte(r), ctx.Literal)
 	}
 
 	lexer.Add([]byte("fn"), ctx.Token("FN"))

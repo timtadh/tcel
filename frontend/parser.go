@@ -170,19 +170,54 @@ func (self *ParseError) Error() string {
 	return fmt.Sprintf(self.ErrorFmt, self.Token)
 }
 
+type Consumer interface {
+	Consume(i int) (int, *Node, *ParseError)
+}
+
+type StringConsumer struct {
+	name string
+	Productions map[string]Consumer
+}
+
+func (self StringConsumer) Consume(i int) (int, *Node, *ParseError) {
+	return self.Productions[self.name].Consume(i)
+}
+
+type FnConsumer func(i int) (int, *Node, *ParseError)
+
+func (self FnConsumer) Consume(i int) (int, *Node, *ParseError) {
+	return self(i)
+}
+
+
 func Parse(tokens []*Token) (*Node, error) {
 
-	type Consumer func(i int) (int, *Node, *ParseError)
+	type Result struct {
+		j int
+		n *Node
+		e *ParseError
+	}
+
+	P := make(map[string]Consumer)
+
+	SC := func(name string) StringConsumer {
+		return StringConsumer{
+			name: name,
+			Productions: P,
+		}
+	}
+
 	var (
+		/*
 		Stmts, Stmt, Assign, Expr, Expr_, Term, Term_, Unary, PostUnary, Factor,
 		Applies, Applies_, Params, Params_, Apply, Index, Function, ParamDecls,
 		ParamDecls_, Type, TypeParams, TypeParams_, If, IfElse, BooleanExpr,
 		BooleanExpr_, AndExpr, AndExpr_, NotExpr, BooleanTerm, CmpExpr,
-		BooleanConstant, CmpOp/*, Array, ArrayLiteral, ArrayParams, ArrayParams_*/ Consumer
+		BooleanConstant, CmpOp, Array, ArrayLiteral, ArrayParams, ArrayParams_ Consumer */
 		Epsilon func(*Node) Consumer
 		Consume func(string) Consumer
 		Concat func(...Consumer) func(func(...*Node)(*Node, *ParseError)) Consumer
-		Alt func(... Consumer) Consumer
+		Alt func(...Consumer) Consumer
 	)
 
 	var top_err *ParseError = nil
@@ -199,82 +234,142 @@ func Parse(tokens []*Token) (*Node, error) {
 		return n, nil
 	}
 
-	Stmts = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Stmt, Stmts)(func (nodes ...*Node) (*Node, *ParseError) {
-				stmts := NewNode("Stmts").AddKid(nodes[0])
-				stmts.Children = append(stmts.Children, nodes[1].Children...)
-				return stmts, nil
-			}),
-			Concat(Stmt)(func (nodes ...*Node) (*Node, *ParseError) {
-				stmts := NewNode("Stmts").AddKid(nodes[0])
-				return stmts, nil
-			}),
-		)(i)
+	Epsilon = func(n *Node) Consumer {
+		return FnConsumer(func(i int) (int, *Node, *ParseError) {
+			return i, n, nil
+		})
 	}
 
-	Stmt = func(i int) (int, *Node, *ParseError) {
-		return Alt(Assign, Expr)(i)
+	Cached := func(c Consumer) Consumer {
+		cache := make(map[int]*Result)
+		return FnConsumer(func(i int) (int, *Node, *ParseError) {
+			if res, in := cache[i]; in {
+				return res.j, res.n, res.e
+			}
+			j, n, e := c.Consume(i)
+			cache[i] = &Result{j, n, e}
+			return j, n, e
+		})
 	}
 
-	Assign = func(i int) (int, *Node, *ParseError) {
-		return Concat(Consume("NAME"), Consume("="), Expr)(
+	Concat = func(consumers ...Consumer) func(func(...*Node)(*Node, *ParseError)) Consumer {
+		return func(action func(...*Node)(*Node, *ParseError)) Consumer {
+			return Cached(FnConsumer(func(i int) (int, *Node, *ParseError) {
+				var nodes []*Node
+				var n *Node
+				var err *ParseError
+				j := i
+				for _, c := range consumers {
+					j, n, err = c.Consume(j)
+					if err == nil {
+						nodes = append(nodes, n)
+					} else {
+						return i, nil, err
+					}
+				}
+				an, aerr := action(nodes...)
+				if aerr != nil {
+					return i, nil, aerr
+				}
+				return j, an, nil
+			}))
+		}
+	}
+
+	Alt = func(consumers ...Consumer) Consumer {
+		return Cached(FnConsumer(func(i int) (int, *Node, *ParseError) {
+			var err *ParseError = nil
+			for _, c := range consumers {
+				j, n, e := c.Consume(i)
+				if e == nil {
+					return j, n, nil
+				} else if err == nil || err.Less(e) {
+					err = e
+				}
+			}
+			if top_err == nil || top_err.Less(err) {
+				top_err = err
+			}
+			return i, nil, err
+		}))
+	}
+
+	Consume = func(token string) Consumer {
+		return FnConsumer(func(i int) (int, *Node, *ParseError) {
+			if i == len(tokens) {
+				return i, nil, Error(
+					fmt.Sprintf("Ran off the end of the input. Expected %v. %%v", token), nil)
+			}
+			tk := tokens[i]
+			if tk.Type == TokMap[token] {
+				return i+1, NewTokenNode(tk), nil
+			}
+			return i, nil, Error(fmt.Sprintf("Expected %v got %%v", token), tk)
+		})
+	}
+
+	for _, token := range Tokens {
+		P[token] = Consume(token)
+	}
+
+	P["Stmts"] = Alt(
+		Concat(SC("Stmt"), SC("Stmts"))(func (nodes ...*Node) (*Node, *ParseError) {
+			stmts := NewNode("Stmts").AddKid(nodes[0])
+			stmts.Children = append(stmts.Children, nodes[1].Children...)
+			return stmts, nil
+		}),
+		Concat(SC("Stmt"))(func (nodes ...*Node) (*Node, *ParseError) {
+			stmts := NewNode("Stmts").AddKid(nodes[0])
+			return stmts, nil
+		}),
+	)
+
+	P["Stmt"] = Alt(SC("Assign"), SC("Expr"), SC("BooleanTerm"))
+
+	P["Assign"] = Concat(SC("NAME"), SC("="), SC("Expr"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				stmts := NewNode("Assign").AddKid(nodes[0]).AddKid(nodes[2])
 				return stmts, nil
-			})(i)
-	}
+			})
 
-	Expr = func(i int) (int, *Node, *ParseError) {
-		return Concat(Term, Expr_)(
+	P["Expr"] = Concat(SC("Term"), SC("Expr_"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				return collapse(nodes[0], nodes[1]), nil
-			})(i)
-	}
+			})
 
-	Expr_ = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume("+"), Term, Expr_)(swing),
-			Concat(Consume("-"), Term, Expr_)(swing),
+	P["Expr_"] = Alt(
+			Concat(SC("+"), SC("Term"), SC("Expr_"))(swing),
+			Concat(SC("-"), SC("Term"), SC("Expr_"))(swing),
 			Epsilon(nil),
-		)(i)
-	}
+		)
 
-	Term = func(i int) (int, *Node, *ParseError) {
-		return Concat(Unary, Term_)(
+	P["Term"] = Concat(SC("Unary"), SC("Term_"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				return collapse(nodes[0], nodes[1]), nil
-			})(i)
-	}
+			})
 
-	Term_ = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume("*"), Unary, Term_)(swing),
-			Concat(Consume("/"), Unary, Term_)(swing),
-			Concat(Consume("%"), Unary, Term_)(swing),
+	P["Term_"] = Alt(
+			Concat(SC("*"), SC("Unary"), SC("Term_"))(swing),
+			Concat(SC("/"), SC("Unary"), SC("Term_"))(swing),
+			Concat(SC("%"), SC("Unary"), SC("Term_"))(swing),
 			Epsilon(nil),
-		)(i)
-	}
+		)
 
-	Unary = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			PostUnary,
-			Concat(Consume("-"), PostUnary)(func (nodes ...*Node) (*Node, *ParseError) {
+	P["Unary"] = Alt(
+			SC("PostUnary"),
+			Concat(SC("-"), SC("PostUnary"))(func (nodes ...*Node) (*Node, *ParseError) {
 				nodes[0].Label = "Negate"
 				return nodes[0].AddKid(nodes[1]), nil
 			}),
-		)(i)
-	}
+		)
 
-	PostUnary = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Factor, Applies)(
+	P["PostUnary"] = Alt(
+			Concat(SC("Factor"), SC("Applies"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					return nodes[1].AddLeftMostKid(nodes[0], "Call", "Index"), nil
 				}),
-			Factor,
-		)(i)
-	}
+			SC("Factor"),
+		)
 
 	aply := func(name string) func(...*Node) (*Node, *ParseError) {
 		return func(nodes ...*Node) (*Node, *ParseError) {
@@ -287,38 +382,29 @@ func Parse(tokens []*Token) (*Node, error) {
 		}
 	}
 
-	Applies = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Apply, Applies_)(aply("Call")),
-			Concat(Index, Applies_)(aply("Index")),
-		)(i)
-	}
+	P["Applies"] = Alt(
+			Concat(SC("Apply"), SC("Applies_"))(aply("Call")),
+			Concat(SC("Index"), SC("Applies_"))(aply("Index")),
+		)
 
-	Applies_ = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Apply, Applies_)(aply("Call")),
-			Concat(Index, Applies_)(aply("Index")),
+	P["Applies_"] = Alt(
+			Concat(SC("Apply"), SC("Applies_"))(aply("Call")),
+			Concat(SC("Index"), SC("Applies_"))(aply("Index")),
 			Epsilon(nil),
-		)(i)
-	}
+		)
 
-	Apply = func(i int) (int, *Node, *ParseError) {
-		return Concat(Consume("("), Params, Consume(")"))(
+	P["Apply"] = Concat(SC("("), SC("Params"), SC(")"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				return nodes[1], nil
-			})(i)
-	}
+			})
 
-	Index = func(i int) (int, *Node, *ParseError) {
-		return Concat(Consume("["), Expr, Consume("]"))(
+	P["Index"] = Concat(SC("["), SC("Expr"), SC("]"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				return nodes[1], nil
-			})(i)
-	}
+			})
 
-	Params = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Expr, Params_)(
+	P["Params"] = Alt(
+			Concat(SC("Expr"), SC("Params_"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					params := NewNode("Params").AddKid(nodes[0])
 					if nodes[1] != nil {
@@ -327,12 +413,10 @@ func Parse(tokens []*Token) (*Node, error) {
 					return params, nil
 				}),
 			Epsilon(NewNode("Params")),
-		)(i)
-	}
+		)
 
-	Params_ = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume(","), Expr, Params_)(
+	P["Params_"] = Alt(
+			Concat(SC(","), SC("Expr"), SC("Params_"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					params := NewNode("Params").AddKid(nodes[1])
 					if nodes[2] != nil {
@@ -341,37 +425,26 @@ func Parse(tokens []*Token) (*Node, error) {
 					return params, nil
 				}),
 			Epsilon(nil),
-		)(i)
-	}
+		)
 
-	Factor = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Consume("NAME"),
-			Consume("INT"),
-			Consume("FLOAT"),
-			Consume("STRING"),
-			Function,
-			If,
-			Concat(Consume("("), Expr, Consume(")"))(
+	P["Factor"] = Alt(
+			SC("NAME"), SC("INT"), SC("FLOAT"), SC("STRING"), SC("Function"), SC("If"),
+			Concat(SC("("), SC("Expr"), SC(")"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					return nodes[1], nil
 				}),
-		)(i)
-	}
+		)
 
-	Function = func(i int) (int, *Node, *ParseError) {
-		return Concat(
-			Consume("FN"), Consume("("), ParamDecls, Consume(")"), Type,
-			Consume("{"), Stmts, Consume("}"))(
+	P["Function"] = Concat(
+			SC("FN"), SC("("), SC("ParamDecls"), SC(")"),
+			SC("Type"), SC("{"), SC("Stmts"), SC("}"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				n := NewNode("Func").AddKid(nodes[2]).AddKid(nodes[4]).AddKid(nodes[6])
 				return n, nil
-			})(i)
-	}
+			})
 
-	ParamDecls = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume("NAME"), Type, ParamDecls_)(
+	P["ParamDecls"] = Alt(
+			Concat(SC("NAME"), SC("Type"), SC("ParamDecls_"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					params := NewNode("ParamDecls").AddKid(
 						NewNode("ParamDecl").AddKid(nodes[0]).AddKid(nodes[1]))
@@ -381,12 +454,10 @@ func Parse(tokens []*Token) (*Node, error) {
 					return params, nil
 				}),
 			Epsilon(NewNode("ParamDecls")),
-		)(i)
-	}
+		)
 
-	ParamDecls_ = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume(","), Consume("NAME"), Type, ParamDecls_)(
+	P["ParamDecls_"] = Alt(
+			Concat(SC(","), SC("NAME"), SC("Type"), SC("ParamDecls_"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					params := NewNode("ParamDecls").AddKid(
 						NewNode("ParamDecl").AddKid(nodes[1]).AddKid(nodes[2]))
@@ -396,26 +467,22 @@ func Parse(tokens []*Token) (*Node, error) {
 					return params, nil
 				}),
 			Epsilon(nil),
-		)(i)
-	}
+		)
 
-	Type = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume("NAME"))(
+	P["Type"] = Alt(
+			Concat(SC("NAME"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					return NewNode("TypeName").AddKid(nodes[0]), nil
 				}),
-			Concat(Consume("FN"), Consume("("), TypeParams, Consume(")"), Type)(
+			Concat(SC("FN"), SC("("), SC("TypeParams"), SC(")"), SC("Type"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					n := NewNode("FuncType").AddKid(nodes[2]).AddKid(nodes[4])
 					return n, nil
 				}),
-		)(i)
-	}
+		)
 
-	TypeParams = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Type, TypeParams_)(
+	P["TypeParams"] = Alt(
+			Concat(SC("Type"), SC("TypeParams_"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					params := NewNode("TypeParams").AddKid(nodes[0])
 					if nodes[1] != nil {
@@ -424,12 +491,10 @@ func Parse(tokens []*Token) (*Node, error) {
 					return params, nil
 				}),
 			Epsilon(NewNode("TypeParams")),
-		)(i)
-	}
+		)
 
-	TypeParams_ = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume(","), Type, TypeParams_)(
+	P["TypeParams_"] = Alt(
+			Concat(SC(","), SC("Type"), SC("TypeParams_"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					params := NewNode("TypeParams").AddKid(nodes[1])
 					if nodes[2] != nil {
@@ -438,162 +503,73 @@ func Parse(tokens []*Token) (*Node, error) {
 					return params, nil
 				}),
 			Epsilon(nil),
-		)(i)
-	}
+		)
 
-	If = func(i int) (int, *Node, *ParseError) {
-		return Concat(
-			Consume("IF"), BooleanExpr, Consume("{"), Stmts, Consume("}"),
-			Consume("ELSE"), IfElse)(
+	P["If"] = Concat(
+			SC("IF"), SC("BooleanExpr"), SC("{"), SC("Stmts"), SC("}"),
+			SC("ELSE"), SC("IfElse"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					n := NewNode("If").AddKid(nodes[1]).AddKid(nodes[3]).AddKid(nodes[6])
 					return n, nil
-				})(i)
-	}
+				})
 
-	IfElse = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(If)(
+	P["IfElse"] = Alt(
+			Concat(SC("If"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					return NewNode("Stmts").AddKid(nodes[0]), nil
 				}),
-			Concat(Consume("{"), Stmts, Consume("}")) (
+			Concat(SC("{"), SC("Stmts"), SC("}")) (
 				func (nodes ...*Node) (*Node, *ParseError) {
 					return nodes[1], nil
 				}),
-		)(i)
-	}
+		)
 
-	BooleanExpr = func(i int) (int, *Node, *ParseError) {
-		return Concat(AndExpr, BooleanExpr_)(
+	P["BooleanExpr"] = Concat(SC("AndExpr"), SC("BooleanExpr_"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				return collapse(nodes[0], nodes[1]), nil
-			})(i)
-	}
+			})
 
-	BooleanExpr_ = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume("||"), AndExpr, BooleanExpr_)(swing),
+	P["BooleanExpr_"] = Alt(
+			Concat(SC("||"), SC("AndExpr"), SC("BooleanExpr_"))(swing),
 			Epsilon(nil),
-		)(i)
-	}
+		)
 
-	AndExpr = func(i int) (int, *Node, *ParseError) {
-		return Concat(NotExpr, AndExpr_)(
+	P["AndExpr"] = Concat(SC("NotExpr"), SC("AndExpr_"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				return collapse(nodes[0], nodes[1]), nil
-			})(i)
-	}
+			})
 
-	AndExpr_ = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume("&&"), NotExpr, AndExpr_)(swing),
+	P["AndExpr_"] = Alt(
+			Concat(SC("&&"), SC("NotExpr"), SC("AndExpr_"))(swing),
 			Epsilon(nil),
-		)(i)
-	}
+		)
 
-	NotExpr = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Concat(Consume("!"), BooleanTerm)(
+	P["NotExpr"] = Alt(
+			Concat(SC("!"), SC("BooleanTerm"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					return NewNode("!").AddKid(nodes[1]), nil
 				}),
-			BooleanTerm,
-		)(i)
-	}
+			SC("BooleanTerm"),
+		)
 
-	BooleanTerm = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Alt(CmpExpr, BooleanConstant),
-			Concat(Consume("("), BooleanExpr, Consume(")"))(
+	P["BooleanTerm"] = Alt(
+			Alt(SC("CmpExpr"), SC("BooleanConstant")),
+			Concat(SC("("), SC("BooleanExpr"), SC(")"))(
 				func (nodes ...*Node) (*Node, *ParseError) {
 					return nodes[1], nil
 				}),
-		)(i)
-	}
+		)
 
-	CmpExpr = func(i int) (int, *Node, *ParseError) {
-		return Concat(Expr, CmpOp, Expr)(
+	P["CmpExpr"] = Concat(SC("Expr"), SC("CmpOp"), SC("Expr"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				return nodes[1].AddKid(nodes[0]).AddKid(nodes[2]), nil
-			})(i)
-	}
+			})
 
-	CmpOp = func(i int) (int, *Node, *ParseError) {
-		return Alt(
-			Consume("<"), Consume("<="),
-			Consume("=="), Consume("!="),
-			Consume(">"), Consume(">="),
-		)(i)
-	}
+	P["CmpOp"] = Alt(SC("<"), SC("<="), SC("=="), SC("!="), SC(">"), SC(">="))
 
-	BooleanConstant = func(i int) (int, *Node, *ParseError) {
-		return Alt(Consume("TRUE"), Consume("FALSE"))(i)
-	}
+	P["BooleanConstant"] = Alt(SC("TRUE"), SC("FALSE"))
 
-	Epsilon = func(n *Node) Consumer {
-		return func(i int) (int, *Node, *ParseError) {
-			return i, n, nil
-		}
-	}
-
-	Concat = func(consumers ...Consumer) func(func(...*Node)(*Node, *ParseError)) Consumer {
-		return func(action func(...*Node)(*Node, *ParseError)) Consumer {
-			return func(i int) (int, *Node, *ParseError) {
-				var nodes []*Node
-				var n *Node
-				var err *ParseError
-				j := i
-				for _, consumer := range consumers {
-					j, n, err = consumer(j)
-					if err == nil {
-						nodes = append(nodes, n)
-					} else {
-						return i, nil, err
-					}
-				}
-				an, aerr := action(nodes...)
-				if aerr != nil {
-					return i, nil, aerr
-				}
-				return j, an, nil
-			}
-		}
-	}
-
-	Alt = func(consumers ...Consumer) Consumer {
-		return func(i int) (int, *Node, *ParseError) {
-			var err *ParseError = nil
-			for _, c := range consumers {
-				j, n, e := c(i)
-				if e == nil {
-					return j, n, nil
-				} else if err == nil || err.Less(e) {
-					err = e
-				}
-			}
-			if top_err == nil || top_err.Less(err) {
-				top_err = err
-			}
-			return i, nil, err
-		}
-	}
-
-	Consume = func(token string) Consumer {
-		return func(i int) (int, *Node, *ParseError) {
-			if i == len(tokens) {
-				return i, nil, Error(
-					fmt.Sprintf("Ran off the end of the input. Expected %v. %%v", token), nil)
-			}
-			tk := tokens[i]
-			if tk.Type == TokMap[token] {
-				return i+1, NewTokenNode(tk), nil
-			}
-			return i, nil, Error(fmt.Sprintf("Expected %v got %%v", token), tk)
-		}
-	}
-	
-	i, node, err := Stmts(0)
+	i, node, err := P["Stmts"].Consume(0)
 
 	if err != nil {
 		return nil, err
@@ -604,4 +580,3 @@ func Parse(tokens []*Token) (*Node, error) {
 	}
 	return node, nil
 }
-
