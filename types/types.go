@@ -9,6 +9,7 @@ import (
 type Type interface {
 	String() string
 	Equals(Type) bool
+	Empty() interface{}
 }
 
 type Primative string
@@ -19,7 +20,6 @@ type Function struct {
 }
 
 type Array struct {
-	Length uint
 	Base Type
 }
 
@@ -44,6 +44,16 @@ func (self Primative) Equals(o Type) bool {
 	return false
 }
 
+func (self Primative) Empty() interface{} {
+	switch string(self) {
+	case "string": return ""
+	case "float": return float64(0.0)
+	case "int": return int64(0)
+	case "boolean": return false
+	}
+	panic(fmt.Errorf("Cannot construct and empty %v", self))
+}
+
 func (self *Function) Equals(o Type) bool {
 	t, ok := o.(*Function)
 	if !ok {
@@ -63,11 +73,31 @@ func (self *Function) Equals(o Type) bool {
 	return true
 }
 
+func (self *Function) Empty() interface{} {
+	return "<empty function>"
+}
+
 func (self *Function) String() string {
 	params := make([]string, 0, len(self.Parameters))
 	for _, param := range self.Parameters {
 		params = append(params, param.String())
 	}
 	return fmt.Sprintf("fn(%v)%v", strings.Join(params, ", "), self.Returns)
+}
+
+func (self *Array) Equals(o Type) bool {
+	t, ok := o.(*Array)
+	if !ok {
+		return false
+	}
+	return self.Base.Equals(t.Base)
+}
+
+func (self *Array) String() string {
+	return fmt.Sprintf("[]%v", self.Base)
+}
+
+func (self *Array) Empty() interface{} {
+	return make([]interface{}, 0)
 }
 

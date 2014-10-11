@@ -72,6 +72,7 @@ func init() {
 		"ELSE",
 		"TRUE",
 		"FALSE",
+		"NEW",
 		"INT",
 		"FLOAT",
 		"STRING",
@@ -92,6 +93,12 @@ func NewContext(filename string) *LexerContext {
 }
 
 func (self *LexerContext) Token(name string) lex.Action {
+	return func(scan *lex.Scanner, match *machines.Match) (interface{}, error) {
+		return NewToken(TokMap[name], nil, match, self.Filename), nil
+	}
+}
+
+func (self *LexerContext) TokenValue(name string) lex.Action {
 	return func(scan *lex.Scanner, match *machines.Match) (interface{}, error) {
 		return NewToken(TokMap[name], string(match.Bytes), match, self.Filename), nil
 	}
@@ -119,8 +126,9 @@ func Lexer(text, filename string) (*lex.Scanner, error) {
 	lexer.Add([]byte("else"), ctx.Token("ELSE"))
 	lexer.Add([]byte("true"), ctx.Token("TRUE"))
 	lexer.Add([]byte("false"), ctx.Token("FALSE"))
+	lexer.Add([]byte("new"), ctx.Token("NEW"))
 
-	lexer.Add([]byte("([a-z]|[A-Z])([a-z]|[A-Z]|[0-9]|_)*"), ctx.Token("NAME"))
+	lexer.Add([]byte("([a-z]|[A-Z])([a-z]|[A-Z]|[0-9]|_)*"), ctx.TokenValue("NAME"))
 	lexer.Add(
 		[]byte("[0-9]+"),
 		func(scan *lex.Scanner, match *machines.Match)(interface{}, error) {

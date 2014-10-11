@@ -126,9 +126,23 @@ func (c *checker) Expr(node *frontend.Node) (errors Errors) {
 		errors = c.Function(node)
 	case "If":
 		errors = c.If(node)
+	case "NEW":
+		errors = c.New(node)
 	default:
 		errors = append(errors, fmt.Errorf("unexpected node %v", node))
 	}
+	return errors
+}
+
+func (c *checker) New(node *frontend.Node) (errors Errors) {
+	new_type, err := c.Type(node.Get(0))
+	if err != nil {
+		return append(errors, err...)
+	}
+	if _, ok := new_type.(*types.Function); ok {
+		return append(errors, fmt.Errorf("Cannot construct a function with new %v", node.Serialize(true)))
+	}
+	node.Type = new_type
 	return errors
 }
 
@@ -279,6 +293,8 @@ func (c *checker) Type(node *frontend.Node) (typ types.Type, errors Errors) {
 		return c.TypeName(node)
 	case "FuncType":
 		return c.FuncType(node)
+	case "ArrayType":
+		return c.ArrayType(node)
 	}
 	return nil, append(errors, fmt.Errorf("Unexpected node label %v", node))
 }
@@ -306,6 +322,24 @@ func (c *checker) FuncType(node *frontend.Node) (typ types.Type, errors Errors) 
 	node.Type = &types.Function{
 		Parameters: params,
 		Returns: ret_type,
+	}
+	return node.Type, errors
+}
+
+func (c *checker) ArrayType(node *frontend.Node) (typ types.Type, errors Errors) {
+	base, err := c.Type(node.Get(0))
+	if err != nil {
+		return nil, err
+	}
+	err = c.Expr(node.Get(1))
+	if err != nil {
+		return nil, err
+	}
+	if !types.Int.Equals(node.Get(1).Type) {
+		return nil, append(errors, fmt.Errorf("Expected an integer size got %v %v", node.Get(1).Type, node.Serialize(true)))
+	}
+	node.Type = &types.Array{
+		Base: base,
 	}
 	return node.Type, errors
 }

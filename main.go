@@ -213,7 +213,7 @@ func main() {
 
 	A := parse(L)
 	if stop_at == "ast" {
-		// ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(false))))
+		 ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(false))))
 		return
 	}
 

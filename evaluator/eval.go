@@ -57,8 +57,6 @@ func (self *function) String() string {
 	return fmt.Sprintf("<function %v>", (*frontend.Node)(self))
 }
 
-
-
 type closure struct {
 	fn *function
 	e *Evaluator
@@ -159,9 +157,26 @@ func (e *Evaluator) Expr(node *frontend.Node) (value interface{}) {
 		return e.Params(node)
 	case "If":
 		return e.If(node)
+	case "NEW":
+		return e.New(node)
 	default:
 		panic(fmt.Errorf("unexpected node %v", node))
 	}
+}
+
+func (e *Evaluator) New(node *frontend.Node) (interface{}) {
+	t := node.Get(0).Type
+	if p, ok := t.(types.Primative); ok {
+		return p.Empty()
+	} else if a, ok := t.(*types.Array); ok {
+		length := e.Expr(node.Get(0).Get(1)).(int64)
+		arr := make([]interface{}, length)
+		for i := range arr {
+			arr[i] = a.Base.Empty()
+		}
+		return arr
+	}
+	panic(fmt.Errorf("Unexpected type in new %v", node.Serialize(true)))
 }
 
 func (e *Evaluator) BooleanExpr(node *frontend.Node) (bool) {

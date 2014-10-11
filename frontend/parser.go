@@ -52,9 +52,9 @@ Factor -> NAME
         | INT
         | FLOAT
         | STRING
-        | Array
         | Function
         | If
+        | New
         | ( Expr )
 
 If -> IF BooleanExpr { Stmts } ELSE IfElse
@@ -72,6 +72,7 @@ ParamDecls' -> , NAME Type ParamDecls'
 
 Type -> NAME
       | FN ( TypeParams ) Type
+      | [Expr]Type
 
 TypeParams -> Type TypeParams'
             | e
@@ -116,15 +117,7 @@ BooleanConstant : true
                 | false
                 ;
 
-Array -> ArrayLiteral
-       | [ Expr ] Type
-
-ArrayLiteral -> [ ArrayParams ]
-
-ArrayParams -> Expr Params'
-
-ArrayParams' -> , Expr Params'
-              | e
+New : NEW Type ;
 */
 
 type ParseError struct {
@@ -327,49 +320,49 @@ func Parse(tokens []*Token) (*Node, error) {
 	P["Stmt"] = Alt(SC("Assign"), SC("Expr"), SC("BooleanTerm"))
 
 	P["Assign"] = Concat(SC("NAME"), SC("="), SC("Expr"))(
-			func (nodes ...*Node) (*Node, *ParseError) {
-				stmts := NewNode("Assign").AddKid(nodes[0]).AddKid(nodes[2])
-				return stmts, nil
-			})
+		func (nodes ...*Node) (*Node, *ParseError) {
+			stmts := NewNode("Assign").AddKid(nodes[0]).AddKid(nodes[2])
+			return stmts, nil
+		})
 
 	P["Expr"] = Concat(SC("Term"), SC("Expr_"))(
-			func (nodes ...*Node) (*Node, *ParseError) {
-				return collapse(nodes[0], nodes[1]), nil
-			})
+		func (nodes ...*Node) (*Node, *ParseError) {
+			return collapse(nodes[0], nodes[1]), nil
+		})
 
 	P["Expr_"] = Alt(
-			Concat(SC("+"), SC("Term"), SC("Expr_"))(swing),
-			Concat(SC("-"), SC("Term"), SC("Expr_"))(swing),
-			Epsilon(nil),
-		)
+		Concat(SC("+"), SC("Term"), SC("Expr_"))(swing),
+		Concat(SC("-"), SC("Term"), SC("Expr_"))(swing),
+		Epsilon(nil),
+	)
 
 	P["Term"] = Concat(SC("Unary"), SC("Term_"))(
-			func (nodes ...*Node) (*Node, *ParseError) {
-				return collapse(nodes[0], nodes[1]), nil
-			})
+		func (nodes ...*Node) (*Node, *ParseError) {
+			return collapse(nodes[0], nodes[1]), nil
+		})
 
 	P["Term_"] = Alt(
-			Concat(SC("*"), SC("Unary"), SC("Term_"))(swing),
-			Concat(SC("/"), SC("Unary"), SC("Term_"))(swing),
-			Concat(SC("%"), SC("Unary"), SC("Term_"))(swing),
-			Epsilon(nil),
-		)
+		Concat(SC("*"), SC("Unary"), SC("Term_"))(swing),
+		Concat(SC("/"), SC("Unary"), SC("Term_"))(swing),
+		Concat(SC("%"), SC("Unary"), SC("Term_"))(swing),
+		Epsilon(nil),
+	)
 
 	P["Unary"] = Alt(
-			SC("PostUnary"),
-			Concat(SC("-"), SC("PostUnary"))(func (nodes ...*Node) (*Node, *ParseError) {
-				nodes[0].Label = "Negate"
-				return nodes[0].AddKid(nodes[1]), nil
-			}),
-		)
+		SC("PostUnary"),
+		Concat(SC("-"), SC("PostUnary"))(func (nodes ...*Node) (*Node, *ParseError) {
+			nodes[0].Label = "Negate"
+			return nodes[0].AddKid(nodes[1]), nil
+		}),
+	)
 
 	P["PostUnary"] = Alt(
-			Concat(SC("Factor"), SC("Applies"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					return nodes[1].AddLeftMostKid(nodes[0], "Call", "Index"), nil
-				}),
-			SC("Factor"),
-		)
+		Concat(SC("Factor"), SC("Applies"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				return nodes[1].AddLeftMostKid(nodes[0], "Call", "Index"), nil
+			}),
+		SC("Factor"),
+	)
 
 	aply := func(name string) func(...*Node) (*Node, *ParseError) {
 		return func(nodes ...*Node) (*Node, *ParseError) {
@@ -383,187 +376,205 @@ func Parse(tokens []*Token) (*Node, error) {
 	}
 
 	P["Applies"] = Alt(
-			Concat(SC("Apply"), SC("Applies_"))(aply("Call")),
-			Concat(SC("Index"), SC("Applies_"))(aply("Index")),
-		)
+		Concat(SC("Apply"), SC("Applies_"))(aply("Call")),
+		Concat(SC("Index"), SC("Applies_"))(aply("Index")),
+	)
 
 	P["Applies_"] = Alt(
-			Concat(SC("Apply"), SC("Applies_"))(aply("Call")),
-			Concat(SC("Index"), SC("Applies_"))(aply("Index")),
-			Epsilon(nil),
-		)
+		Concat(SC("Apply"), SC("Applies_"))(aply("Call")),
+		Concat(SC("Index"), SC("Applies_"))(aply("Index")),
+		Epsilon(nil),
+	)
 
 	P["Apply"] = Concat(SC("("), SC("Params"), SC(")"))(
-			func (nodes ...*Node) (*Node, *ParseError) {
-				return nodes[1], nil
-			})
+		func (nodes ...*Node) (*Node, *ParseError) {
+			return nodes[1], nil
+		})
 
 	P["Index"] = Concat(SC("["), SC("Expr"), SC("]"))(
-			func (nodes ...*Node) (*Node, *ParseError) {
-				return nodes[1], nil
-			})
+		func (nodes ...*Node) (*Node, *ParseError) {
+			return nodes[1], nil
+		})
 
 	P["Params"] = Alt(
-			Concat(SC("Expr"), SC("Params_"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					params := NewNode("Params").AddKid(nodes[0])
-					if nodes[1] != nil {
-						params.Children = append(params.Children, nodes[1].Children...)
-					}
-					return params, nil
-				}),
-			Epsilon(NewNode("Params")),
-		)
+		Concat(SC("Expr"), SC("Params_"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				params := NewNode("Params").AddKid(nodes[0])
+				if nodes[1] != nil {
+					params.Children = append(params.Children, nodes[1].Children...)
+				}
+				return params, nil
+			}),
+		Epsilon(NewNode("Params")),
+	)
 
 	P["Params_"] = Alt(
-			Concat(SC(","), SC("Expr"), SC("Params_"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					params := NewNode("Params").AddKid(nodes[1])
-					if nodes[2] != nil {
-						params.Children = append(params.Children, nodes[2].Children...)
-					}
-					return params, nil
-				}),
-			Epsilon(nil),
-		)
+		Concat(SC(","), SC("Expr"), SC("Params_"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				params := NewNode("Params").AddKid(nodes[1])
+				if nodes[2] != nil {
+					params.Children = append(params.Children, nodes[2].Children...)
+				}
+				return params, nil
+			}),
+		Epsilon(nil),
+	)
 
 	P["Factor"] = Alt(
-			SC("NAME"), SC("INT"), SC("FLOAT"), SC("STRING"), SC("Function"), SC("If"),
-			Concat(SC("("), SC("Expr"), SC(")"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					return nodes[1], nil
-				}),
-		)
+		SC("NAME"),
+		SC("INT"),
+		SC("FLOAT"),
+		SC("STRING"),
+		SC("Function"),
+		SC("If"),
+		SC("New"),
+		Concat(SC("("), SC("Expr"), SC(")"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				return nodes[1], nil
+			}),
+	)
+
+
+	P["New"] = Concat(
+		SC("NEW"), SC("Type"))(
+		func (nodes ...*Node) (*Node, *ParseError) {
+			return nodes[0].AddKid(nodes[1]), nil
+		})
 
 	P["Function"] = Concat(
-			SC("FN"), SC("("), SC("ParamDecls"), SC(")"),
-			SC("Type"), SC("{"), SC("Stmts"), SC("}"))(
+		SC("FN"), SC("("), SC("ParamDecls"), SC(")"),
+		SC("Type"), SC("{"), SC("Stmts"), SC("}"))(
+		func (nodes ...*Node) (*Node, *ParseError) {
+			n := NewNode("Func").AddKid(nodes[2]).AddKid(nodes[4]).AddKid(nodes[6])
+			return n, nil
+		})
+
+	P["ParamDecls"] = Alt(
+		Concat(SC("NAME"), SC("Type"), SC("ParamDecls_"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				n := NewNode("Func").AddKid(nodes[2]).AddKid(nodes[4]).AddKid(nodes[6])
+				params := NewNode("ParamDecls").AddKid(
+					NewNode("ParamDecl").AddKid(nodes[0]).AddKid(nodes[1]))
+				if nodes[2] != nil {
+					params.Children = append(params.Children, nodes[2].Children...)
+				}
+				return params, nil
+			}),
+		Epsilon(NewNode("ParamDecls")),
+	)
+
+	P["ParamDecls_"] = Alt(
+		Concat(SC(","), SC("NAME"), SC("Type"), SC("ParamDecls_"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				params := NewNode("ParamDecls").AddKid(
+					NewNode("ParamDecl").AddKid(nodes[1]).AddKid(nodes[2]))
+				if nodes[3] != nil {
+					params.Children = append(params.Children, nodes[3].Children...)
+				}
+				return params, nil
+			}),
+		Epsilon(nil),
+	)
+
+	P["Type"] = Alt(
+		Concat(SC("NAME"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				return NewNode("TypeName").AddKid(nodes[0]), nil
+			}),
+		Concat(SC("FN"), SC("("), SC("TypeParams"), SC(")"), SC("Type"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				n := NewNode("FuncType").AddKid(nodes[2]).AddKid(nodes[4])
+				return n, nil
+			}),
+		Concat(SC("["), SC("Expr"), SC("]"), SC("Type"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				n := NewNode("ArrayType").AddKid(nodes[3]).AddKid(nodes[1])
+				return n, nil
+			}),
+	)
+
+	P["TypeParams"] = Alt(
+		Concat(SC("Type"), SC("TypeParams_"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				params := NewNode("TypeParams").AddKid(nodes[0])
+				if nodes[1] != nil {
+					params.Children = append(params.Children, nodes[1].Children...)
+				}
+				return params, nil
+			}),
+		Epsilon(NewNode("TypeParams")),
+	)
+
+	P["TypeParams_"] = Alt(
+		Concat(SC(","), SC("Type"), SC("TypeParams_"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				params := NewNode("TypeParams").AddKid(nodes[1])
+				if nodes[2] != nil {
+					params.Children = append(params.Children, nodes[2].Children...)
+				}
+				return params, nil
+			}),
+		Epsilon(nil),
+	)
+
+	P["If"] = Concat(
+		SC("IF"), SC("BooleanExpr"), SC("{"), SC("Stmts"), SC("}"),
+		SC("ELSE"), SC("IfElse"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				n := NewNode("If").AddKid(nodes[1]).AddKid(nodes[3]).AddKid(nodes[6])
 				return n, nil
 			})
 
-	P["ParamDecls"] = Alt(
-			Concat(SC("NAME"), SC("Type"), SC("ParamDecls_"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					params := NewNode("ParamDecls").AddKid(
-						NewNode("ParamDecl").AddKid(nodes[0]).AddKid(nodes[1]))
-					if nodes[2] != nil {
-						params.Children = append(params.Children, nodes[2].Children...)
-					}
-					return params, nil
-				}),
-			Epsilon(NewNode("ParamDecls")),
-		)
-
-	P["ParamDecls_"] = Alt(
-			Concat(SC(","), SC("NAME"), SC("Type"), SC("ParamDecls_"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					params := NewNode("ParamDecls").AddKid(
-						NewNode("ParamDecl").AddKid(nodes[1]).AddKid(nodes[2]))
-					if nodes[3] != nil {
-						params.Children = append(params.Children, nodes[3].Children...)
-					}
-					return params, nil
-				}),
-			Epsilon(nil),
-		)
-
-	P["Type"] = Alt(
-			Concat(SC("NAME"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					return NewNode("TypeName").AddKid(nodes[0]), nil
-				}),
-			Concat(SC("FN"), SC("("), SC("TypeParams"), SC(")"), SC("Type"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					n := NewNode("FuncType").AddKid(nodes[2]).AddKid(nodes[4])
-					return n, nil
-				}),
-		)
-
-	P["TypeParams"] = Alt(
-			Concat(SC("Type"), SC("TypeParams_"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					params := NewNode("TypeParams").AddKid(nodes[0])
-					if nodes[1] != nil {
-						params.Children = append(params.Children, nodes[1].Children...)
-					}
-					return params, nil
-				}),
-			Epsilon(NewNode("TypeParams")),
-		)
-
-	P["TypeParams_"] = Alt(
-			Concat(SC(","), SC("Type"), SC("TypeParams_"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					params := NewNode("TypeParams").AddKid(nodes[1])
-					if nodes[2] != nil {
-						params.Children = append(params.Children, nodes[2].Children...)
-					}
-					return params, nil
-				}),
-			Epsilon(nil),
-		)
-
-	P["If"] = Concat(
-			SC("IF"), SC("BooleanExpr"), SC("{"), SC("Stmts"), SC("}"),
-			SC("ELSE"), SC("IfElse"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					n := NewNode("If").AddKid(nodes[1]).AddKid(nodes[3]).AddKid(nodes[6])
-					return n, nil
-				})
-
 	P["IfElse"] = Alt(
-			Concat(SC("If"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					return NewNode("Stmts").AddKid(nodes[0]), nil
-				}),
-			Concat(SC("{"), SC("Stmts"), SC("}")) (
-				func (nodes ...*Node) (*Node, *ParseError) {
-					return nodes[1], nil
-				}),
-		)
+		Concat(SC("If"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				return NewNode("Stmts").AddKid(nodes[0]), nil
+			}),
+		Concat(SC("{"), SC("Stmts"), SC("}")) (
+			func (nodes ...*Node) (*Node, *ParseError) {
+				return nodes[1], nil
+			}),
+	)
 
 	P["BooleanExpr"] = Concat(SC("AndExpr"), SC("BooleanExpr_"))(
-			func (nodes ...*Node) (*Node, *ParseError) {
-				return collapse(nodes[0], nodes[1]), nil
-			})
+		func (nodes ...*Node) (*Node, *ParseError) {
+			return collapse(nodes[0], nodes[1]), nil
+		})
 
 	P["BooleanExpr_"] = Alt(
-			Concat(SC("||"), SC("AndExpr"), SC("BooleanExpr_"))(swing),
-			Epsilon(nil),
-		)
+		Concat(SC("||"), SC("AndExpr"), SC("BooleanExpr_"))(swing),
+		Epsilon(nil),
+	)
 
 	P["AndExpr"] = Concat(SC("NotExpr"), SC("AndExpr_"))(
-			func (nodes ...*Node) (*Node, *ParseError) {
-				return collapse(nodes[0], nodes[1]), nil
-			})
+		func (nodes ...*Node) (*Node, *ParseError) {
+			return collapse(nodes[0], nodes[1]), nil
+		})
 
 	P["AndExpr_"] = Alt(
-			Concat(SC("&&"), SC("NotExpr"), SC("AndExpr_"))(swing),
-			Epsilon(nil),
-		)
+		Concat(SC("&&"), SC("NotExpr"), SC("AndExpr_"))(swing),
+		Epsilon(nil),
+	)
 
 	P["NotExpr"] = Alt(
-			Concat(SC("!"), SC("BooleanTerm"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					return NewNode("!").AddKid(nodes[1]), nil
-				}),
-			SC("BooleanTerm"),
-		)
+		Concat(SC("!"), SC("BooleanTerm"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				return NewNode("!").AddKid(nodes[1]), nil
+			}),
+		SC("BooleanTerm"),
+	)
 
 	P["BooleanTerm"] = Alt(
-			Alt(SC("CmpExpr"), SC("BooleanConstant")),
-			Concat(SC("("), SC("BooleanExpr"), SC(")"))(
-				func (nodes ...*Node) (*Node, *ParseError) {
-					return nodes[1], nil
-				}),
-		)
+		Alt(SC("CmpExpr"), SC("BooleanConstant")),
+		Concat(SC("("), SC("BooleanExpr"), SC(")"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				return nodes[1], nil
+			}),
+	)
 
 	P["CmpExpr"] = Concat(SC("Expr"), SC("CmpOp"), SC("Expr"))(
-			func (nodes ...*Node) (*Node, *ParseError) {
-				return nodes[1].AddKid(nodes[0]).AddKid(nodes[2]), nil
-			})
+		func (nodes ...*Node) (*Node, *ParseError) {
+			return nodes[1].AddKid(nodes[0]).AddKid(nodes[2]), nil
+		})
 
 	P["CmpOp"] = Alt(SC("<"), SC("<="), SC("=="), SC("!="), SC(">"), SC(">="))
 
