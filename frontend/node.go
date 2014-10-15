@@ -86,29 +86,6 @@ func (self *Node) Get(idx int) *Node {
 	return self.Children[idx]
 }
 
-func (self *Node) AddLeftMostKid(kid *Node, names ...string) *Node {
-	if kid == nil {
-		return self
-	}
-	if len(self.Get(0).Children) > 0 {
-		if len(names) == 0 {
-			self.Get(0).AddLeftMostKid(kid)
-			return self
-		} else {
-			for _, name := range names {
-				if self.Get(0).Label == name {
-					self.Get(0).AddLeftMostKid(kid, names...)
-					return self
-				}
-			}
-		}
-	}
-	kids := self.Children
-	self.Children = []*Node{kid}
-	self.Children = append(self.Children, kids...)
-	return self
-}
-
 func (self *Node) WellTyped() bool {
 	well_typed := self.Type != nil
 	if well_typed {

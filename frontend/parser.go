@@ -241,7 +241,8 @@ func Parse(tokens []*Token) (*Node, error) {
 	}
 
 	swing := func (nodes ...*Node) (*Node, *ParseError) {
-		n := NewNode("T").AddKid(nodes[0]).AddKid(collapse(nodes[0].AddKid(nodes[1]), nodes[2]))
+		n := NewNode("T").AddKid(nodes[0]).AddKid(
+			collapse(nodes[0].AddKid(nodes[1]), nodes[2]))
 		return n, nil
 	}
 
@@ -377,41 +378,36 @@ func Parse(tokens []*Token) (*Node, error) {
 	P["PostUnary"] = Alt(
 		Concat(SC("Factor"), SC("Applies"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				return nodes[1].AddLeftMostKid(nodes[0], "Call", "Index"), nil
+				return collapse(nodes[0], nodes[1]), nil
 			}),
 		SC("Factor"),
 	)
 
-	aply := func(name string) func(...*Node) (*Node, *ParseError) {
-		return func(nodes ...*Node) (*Node, *ParseError) {
-			if nodes[1] == nil {
-				return NewNode(name).AddKid(nodes[0]), nil
-			}
-			root := nodes[1]
-			root.AddLeftMostKid(NewNode(name).AddKid(nodes[0]), "Call", "Index")
-			return root, nil
-		}
+	aply_swing := func (nodes ...*Node) (*Node, *ParseError) {
+		n := NewNode("T").AddKid(nodes[0]).AddKid(
+			collapse(nodes[0], nodes[1]))
+		return n, nil
 	}
 
 	P["Applies"] = Alt(
-		Concat(SC("Apply"), SC("Applies_"))(aply("Call")),
-		Concat(SC("Index"), SC("Applies_"))(aply("Index")),
+		Concat(SC("Apply"), SC("Applies_"))(aply_swing),
+		Concat(SC("Index"), SC("Applies_"))(aply_swing),
 	)
 
 	P["Applies_"] = Alt(
-		Concat(SC("Apply"), SC("Applies_"))(aply("Call")),
-		Concat(SC("Index"), SC("Applies_"))(aply("Index")),
+		Concat(SC("Apply"), SC("Applies_"))(aply_swing),
+		Concat(SC("Index"), SC("Applies_"))(aply_swing),
 		Epsilon(nil),
 	)
 
 	P["Apply"] = Concat(SC("("), SC("Params"), SC(")"))(
 		func (nodes ...*Node) (*Node, *ParseError) {
-			return nodes[1], nil
+			return NewNode("Call").AddKid(nodes[1]), nil
 		})
 
 	P["Index"] = Concat(SC("["), SC("Expr"), SC("]"))(
 		func (nodes ...*Node) (*Node, *ParseError) {
-			return nodes[1], nil
+			return NewNode("Index").AddKid(nodes[1]), nil
 		})
 
 	P["Params"] = Alt(
