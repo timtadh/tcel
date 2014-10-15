@@ -63,6 +63,13 @@ func (self *Node) AddKid(kid *Node) *Node {
 	return self
 }
 
+func (self *Node) PrependKid(kid *Node) *Node {
+	kids := self.Children
+	self.Children = []*Node{kid}
+	self.Children = append(self.Children, kids...)
+	return self
+}
+
 func (self *Node) Kid(label string) *Node {
 	for _, kid := range self.Children {
 		if kid.Label == label {

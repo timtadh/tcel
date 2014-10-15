@@ -219,11 +219,29 @@ func Parse(tokens []*Token) (*Node, error) {
 		if extra == nil {
 			return subtree
 		}
-		return extra.Get(0).AddKid(subtree).AddKid(extra.Get(1))
+		// extra == T
+		//         / \
+		//       op   root
+		//             .
+		//             .
+		//             .
+		//          op
+
+		// returns
+		//           root
+		//             .
+		//             .
+		//             .
+		//          op
+		//            \
+		//             subtree
+		op := extra.Get(0)
+		op.PrependKid(subtree)
+		return extra.Get(1)
 	}
 
 	swing := func (nodes ...*Node) (*Node, *ParseError) {
-		n := NewNode("T").AddKid(nodes[0]).AddKid(collapse(nodes[1], nodes[2]))
+		n := NewNode("T").AddKid(nodes[0]).AddKid(collapse(nodes[0].AddKid(nodes[1]), nodes[2]))
 		return n, nil
 	}
 
