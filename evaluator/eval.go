@@ -82,6 +82,7 @@ func newEvaluator() *Evaluator {
 	for _, p := range types.Primatives {
 		e.types.Put(string(p), p)
 	}
+	e.syms.Put("unit", types.Unit)
 	return e
 }
 
