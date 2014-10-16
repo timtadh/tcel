@@ -70,13 +70,15 @@ func (c *checker) Pop() {
 	}
 }
 
-
 func (c *checker) Stmts(node *frontend.Node) (errors Errors) {
 	if node.Label != "Stmts" {
 		panic("expected a stmts node")
 	}
 	for _, stmt := range node.Children {
 		errors = append(errors, c.Stmt(stmt)...)
+		if stmt.Type == nil {
+			errors = append(errors, fmt.Errorf("Stmt not well typed : %v", stmt.Serialize(true)))
+		}
 	}
 	if len(errors) == 0 {
 		node.Type = types.Unit
@@ -95,15 +97,64 @@ func (c *checker) Stmt(node *frontend.Node) (errors Errors) {
 }
 
 func (c *checker) Assign(node *frontend.Node) (errors Errors) {
-	name := node.Get(0).Value.(string)
-	expr := node.Get(-1)
+	name := node.Get(0)
+	expr := node.Get(1)
+	errors = append(errors, c.Indexed(name)...)
 	errors = append(errors, c.Expr(expr)...)
 	if len(errors) == 0 {
-		node.Get(0).Type = expr.Type
-		c.syms.Put(name, expr.Type)
-		node.Type = types.Unit
+		if name.Type == nil {
+			sym, errors := c.NAME(name)
+			if len(errors) != 0 {
+				return errors
+			}
+			name.Type = expr.Type
+			c.syms.Put(sym, expr.Type)
+			node.Type = types.Unit
+		} else if !name.Type.Equals(expr.Type) {
+			errors = append(errors, fmt.Errorf("Assignee did not agree in types with Assinged : %v", node.Serialize(true)))
+		} else {
+			node.Type = types.Unit
+		}
 	}
 	return errors
+}
+
+func (c *checker) Indexed(node *frontend.Node) (errors Errors) {
+	if node.Label == "NAME" {
+		errors = c.TrySymbol(node)
+	} else if node.Label == "Index" {
+		errors = append(errors, c.Indexed(node.Get(0))...)
+		errors = append(errors, c.Indexer(node.Get(1))...)
+		if node.Get(0).Label == "NAME" {
+			errors = append(errors, c.Symbol(node.Get(0))...)
+		}
+		if t, isarr := node.Get(0).Type.(*types.Array); !isarr {
+			errors = append(errors, fmt.Errorf("Expected a node of type array got %v %T %v", node.Get(0).Serialize(true), node.Get(0).Type, t))
+		} else {
+			node.Type = t.Base
+		}
+	} else {
+		errors = append(errors, fmt.Errorf("unxpected node in Indexed : %v", node.Serialize(true)))
+	}
+	return errors
+}
+
+func (c *checker) Indexer(node *frontend.Node) (errors Errors) {
+	errors = c.Expr(node)
+	if len(errors) > 0 {
+		return errors
+	}
+	if !node.Type.Equals(types.Int) {
+		return append(errors, fmt.Errorf("Expected a node of type int as the index got %v", node.Serialize(true)))
+	}
+	return nil
+}
+
+func (c *checker) NAME(node *frontend.Node) (name string, errors Errors) {
+	if node.Label != "NAME" {
+		return "", append(errors, fmt.Errorf("expected a NAME node : %v", node.Serialize(true)))
+	}
+	return node.Value.(string), nil
 }
 
 func (c *checker) Expr(node *frontend.Node) (errors Errors) {
@@ -122,6 +173,8 @@ func (c *checker) Expr(node *frontend.Node) (errors Errors) {
 		errors = c.Symbol(node)
 	case "Call":
 		errors = c.Call(node)
+	case "Index":
+		errors = c.Index(node)
 	case "Func":
 		errors = c.Function(node)
 	case "If":
@@ -164,6 +217,34 @@ func (c *checker) BooleanExpr(node *frontend.Node) (errors Errors) {
 	return errors
 }
 
+func (c *checker) Index(node *frontend.Node) (errors Errors) {
+	indexed := node.Get(0)
+	index := node.Get(1)
+
+	err := c.Expr(indexed)
+	if err != nil {
+		return err
+	}
+
+	err = c.Expr(index)
+	if err != nil {
+		return err
+	}
+
+	a_type, ok := indexed.Type.(*types.Array)
+	if !ok {
+		return append(errors, fmt.Errorf("Expected a array type got, %v", indexed.Serialize(true)))
+	}
+
+	if !index.Type.Equals(types.Int) {
+		return append(errors, fmt.Errorf("Array index expected int got %v", index.Serialize(true)))
+	}
+
+	node.Type = a_type.Base
+
+	return errors
+}
+
 func (c *checker) Call(node *frontend.Node) (errors Errors) {
 	callee := node.Get(0)
 	params := node.Get(1)
@@ -194,7 +275,7 @@ func (c *checker) Call(node *frontend.Node) (errors Errors) {
 	}
 
 	node.Type = f_type.Returns
-	
+
 	return errors
 }
 
@@ -300,7 +381,10 @@ func (c *checker) Type(node *frontend.Node) (typ types.Type, errors Errors) {
 }
 
 func (c *checker) TypeName(node *frontend.Node) (typ types.Type, errors Errors) {
-	sym := node.Get(0).Value.(string)
+	sym, errors := c.NAME(node.Get(0))
+	if len(errors) > 0 {
+		return nil, errors
+	}
 	if e := c.types.Get(sym); e == nil {
 		errors = append(errors, fmt.Errorf("type, %v, undeclared", node.Get(0).Serialize(true)))
 	} else {
@@ -359,10 +443,10 @@ func (c *checker) TypeParams(node *frontend.Node) (typ []types.Type, errors Erro
 func (c *checker) ParamDecls(node *frontend.Node) (typ []types.Type, errors Errors) {
 	for _, kid := range node.Children {
 		n := kid.Get(0)
-		if n.Label != "NAME" {
-			return nil, append(errors, fmt.Errorf("Expected a NAME node in ParamDecls"))
+		name, err := c.NAME(n)
+		if err != nil {
+			return nil, err
 		}
-		name := n.Value.(string)
 		t, err := c.Type(kid.Get(1))
 		if err != nil {
 			return nil, err
@@ -375,15 +459,24 @@ func (c *checker) ParamDecls(node *frontend.Node) (typ []types.Type, errors Erro
 	return typ, nil
 }
 
-func (c *checker) Symbol(node *frontend.Node) (errors Errors) {
-	if node.Label != "NAME" {
-		return append(errors, fmt.Errorf("expected a symbol node"))
+func (c *checker) TrySymbol(node *frontend.Node) (errors Errors) {
+	sym, errors := c.NAME(node)
+	if len(errors) > 0 {
+		return errors
 	}
-	sym := node.Value.(string)
-	if e := c.syms.Get(sym); e == nil {
-		errors = append(errors, fmt.Errorf("symbol, %v, undeclared", node.Serialize(true)))
-	} else {
+	if e := c.syms.Get(sym); e != nil {
 		node.Type = e.(types.Type)
+	}
+	return errors
+}
+
+func (c *checker) Symbol(node *frontend.Node) (errors Errors) {
+	errors = c.TrySymbol(node)
+	if len(errors) > 0 {
+		return errors
+	}
+	if node.Type == nil {
+		errors = append(errors, fmt.Errorf("symbol, %v, undeclared", node.Serialize(true)))
 	}
 	return errors
 }

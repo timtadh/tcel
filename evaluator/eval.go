@@ -125,10 +125,36 @@ func (e *Evaluator) Stmt(node *frontend.Node) (value interface{}) {
 }
 
 func (e *Evaluator) Assign(node *frontend.Node) (value interface{}) {
-	name := node.Get(0).Value.(string)
 	expr := e.Expr(node.Get(1))
-	e.syms.Put(name, expr)
+	return e.assign(node.Get(0), expr)
+}
+
+func (e *Evaluator) assign(node *frontend.Node, expr interface{}) (value interface{}) {
+	if node.Label == "NAME" {
+		name := e.NAME(node)
+		e.syms.Put(name, expr)
+		return types.Unit
+	}
+	assignee, index := e.assignee(node)
+	assignee[index] = expr
 	return types.Unit
+}
+
+func (e *Evaluator) assignee(node *frontend.Node) (value []interface{}, i int64) {
+	if node.Label == "Index" {
+		item := e.Expr(node.Get(0)).([]interface{})
+		spot := e.Expr(node.Get(1)).(int64)
+		return item, spot
+	} else {
+		panic(fmt.Errorf("Unxpected node %v", node))
+	}
+}
+
+func (e *Evaluator) NAME(node *frontend.Node) (string) {
+	if node.Label != "NAME" {
+		panic(fmt.Errorf("expected a NAME node : %v", node.Serialize(true)))
+	}
+	return node.Value.(string)
 }
 
 func (e *Evaluator) Expr(node *frontend.Node) (value interface{}) {
@@ -144,13 +170,11 @@ func (e *Evaluator) Expr(node *frontend.Node) (value interface{}) {
 	case "STRING":
 		return node.Value.(string)
 	case "NAME":
-		if sym := e.syms.Get(node.Value.(string)); sym == nil {
-			panic(fmt.Errorf("Unknown name, %v", node.Serialize(true)))
-		} else {
-			return sym
-		}
+		return e.Symbol(node)
 	case "Call":
 		return e.Call(node)
+	case "Index":
+		return e.Index(node)
 	case "Func":
 		return (*function)(node)
 	case "Params":
@@ -164,20 +188,34 @@ func (e *Evaluator) Expr(node *frontend.Node) (value interface{}) {
 	}
 }
 
+func (e *Evaluator) Symbol(node *frontend.Node) (interface{}) {
+	if sym := e.syms.Get(node.Value.(string)); sym == nil {
+		panic(fmt.Errorf("Unknown name, %v", node.Serialize(true)))
+	} else {
+		return sym
+	}
+}
+
 func (e *Evaluator) New(node *frontend.Node) (interface{}) {
-	t := node.Get(0).Type
+	return e._new(node.Get(0))
+}
+
+func (e *Evaluator) _new(node *frontend.Node) (interface{}) {
+	t := node.Type
 	if p, ok := t.(types.Primative); ok {
 		return p.Empty()
-	} else if a, ok := t.(*types.Array); ok {
-		length := e.Expr(node.Get(0).Get(1)).(int64)
+	} else if _, ok := t.(*types.Array); ok {
+		length := e.Expr(node.Get(1)).(int64)
 		arr := make([]interface{}, length)
 		for i := range arr {
-			arr[i] = a.Base.Empty()
+			arr[i] = e._new(node.Get(0))
 		}
 		return arr
 	}
 	panic(fmt.Errorf("Unexpected type in new %v", node.Serialize(true)))
 }
+
+
 
 func (e *Evaluator) BooleanExpr(node *frontend.Node) (bool) {
 	switch node.Label {
@@ -248,6 +286,12 @@ func (e *Evaluator) Call(node *frontend.Node) (value interface{}) {
 		return ret
 	}
 	return ret
+}
+
+func (e *Evaluator) Index(node *frontend.Node) (value interface{}) {
+	indexed := e.Expr(node.Get(0)).([]interface{})
+	index := e.Expr(node.Get(1)).(int64)
+	return indexed[index]
 }
 
 func (e *Evaluator) ArithOp(node *frontend.Node) (value interface{}) {

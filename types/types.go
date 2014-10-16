@@ -74,7 +74,7 @@ func (self *Function) Equals(o Type) bool {
 }
 
 func (self *Function) Empty() interface{} {
-	return "<empty function>"
+	panic("cannot construct an empty function yet")
 }
 
 func (self *Function) String() string {
