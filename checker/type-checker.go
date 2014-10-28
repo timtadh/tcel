@@ -53,6 +53,7 @@ func newChecker() *checker {
 	for _, p := range types.Primatives {
 		c.types.Put(string(p), p)
 	}
+	c.syms.Put("unit", types.Unit)
 	return c
 }
 
@@ -121,7 +122,7 @@ func (c *checker) Assign(node *frontend.Node) (errors Errors) {
 
 func (c *checker) Indexed(node *frontend.Node) (errors Errors) {
 	if node.Label == "NAME" {
-		errors = c.TrySymbol(node)
+		errors = c.TryTopSymbol(node)
 	} else if node.Label == "Index" {
 		errors = append(errors, c.Indexed(node.Get(0))...)
 		errors = append(errors, c.Indexer(node.Get(1))...)
@@ -415,12 +416,14 @@ func (c *checker) ArrayType(node *frontend.Node) (typ types.Type, errors Errors)
 	if err != nil {
 		return nil, err
 	}
-	err = c.Expr(node.Get(1))
-	if err != nil {
-		return nil, err
-	}
-	if !types.Int.Equals(node.Get(1).Type) {
-		return nil, append(errors, fmt.Errorf("Expected an integer size got %v %v", node.Get(1).Type, node.Serialize(true)))
+	if len(node.Children) > 1 {
+		err = c.Expr(node.Get(1))
+		if err != nil {
+			return nil, err
+		}
+		if !types.Int.Equals(node.Get(1).Type) {
+			return nil, append(errors, fmt.Errorf("Expected an integer size got %v %v", node.Get(1).Type, node.Serialize(true)))
+		}
 	}
 	node.Type = &types.Array{
 		Base: base,
@@ -457,6 +460,18 @@ func (c *checker) ParamDecls(node *frontend.Node) (typ []types.Type, errors Erro
 	}
 	node.Type = types.Unit
 	return typ, nil
+}
+
+func (c *checker) TryTopSymbol(node *frontend.Node) (errors Errors) {
+	sym, errors := c.NAME(node)
+	if len(errors) > 0 {
+		return errors
+	}
+	if c.syms.TopHas(sym) {
+		e := c.syms.Get(sym)
+		node.Type = e.(types.Type)
+	}
+	return errors
 }
 
 func (c *checker) TrySymbol(node *frontend.Node) (errors Errors) {
@@ -566,7 +581,7 @@ func (c *checker) CmpOp(node *frontend.Node) (errors Errors) {
 		if !a.Type.Equals(b.Type) {
 			errors = append(errors, fmt.Errorf("a, %v, does not agree with b, %v, in types", a, b))
 		}
-		if !matches(a.Type, types.Int, types.Float) {
+		if !matches(a.Type, types.Int, types.Float, types.String) {
 			errors = append(errors, fmt.Errorf("type %v does not support boolean comparison ops", a))
 		}
 	}

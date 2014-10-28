@@ -23,6 +23,7 @@ type Array struct {
 	Base Type
 }
 
+var Label Primative = "label"
 var Unit Primative = "unit"
 var String Primative = "string"
 var Float Primative = "float"
