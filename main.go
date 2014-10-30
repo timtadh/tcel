@@ -17,6 +17,7 @@ import (
 	"github.com/timtadh/tcel/frontend"
 	"github.com/timtadh/tcel/checker"
 	"github.com/timtadh/tcel/evaluator"
+	"github.com/timtadh/tcel/il"
 )
 
 var log *logpkg.Logger
@@ -137,6 +138,15 @@ func parse(files FilesTokens) *frontend.Node {
 	return A
 }
 
+func ilgen(node *frontend.Node) il.Functions {
+	log.Print("> generating intermediate code")
+	fns, err := il.Generate(node)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return fns
+}
+
 func typecheck(node *frontend.Node) *frontend.Node {
 	log.Print("> type checking")
 	err := checker.Check(node)
@@ -157,11 +167,11 @@ func eval(node *frontend.Node) []interface{} {
 
 func main() {
 
-	short := "ho:LAT"
+	short := "ho:LATI"
 	long := []string{
 		"help",
 		"output=",
-		"lex", "ast", "typed-ast",
+		"lex", "ast", "typed-ast", "il",
 	}
 
 	args, optargs, err := getopt.GetOpt(os.Args[1:], short, long)
@@ -184,6 +194,8 @@ func main() {
 			stop_at = "ast"
 		case "-T", "--typed-ast":
 			stop_at = "typed-ast"
+		case "-I", "--il":
+			stop_at = "il"
 		}
 	}
 
@@ -213,7 +225,13 @@ func main() {
 
 	A := parse(L)
 	if stop_at == "ast" {
-		 ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(false))))
+		ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(false))))
+		return
+	}
+	
+	if stop_at == "il" {
+		I := ilgen(A)
+		write(I, ouf)
 		return
 	}
 

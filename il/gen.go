@@ -22,7 +22,7 @@ func Generate(node *frontend.Node) (funcs Functions, err error) {
 		}
 	}()
 	g := newIlGen()
-	g.Stmts(node, g.fn.Entry())
+	g.Stmts(node, nil, g.fn.Entry())
 	return g.funcs, nil
 }
 
@@ -77,6 +77,20 @@ func (g *ilGen) NewFunc(t *types.Function) *Func {
 	return f
 }
 
+func (g *ilGen) Push() {
+	g.syms.Push()
+	g.types.Push()
+}
+
+func (g *ilGen) Pop() {
+	if err := g.types.Pop(); err != nil {
+		panic(err)
+	}
+	if err := g.syms.Pop(); err != nil {
+		panic(err)
+	}
+}
+
 func (g *ilGen) CONST(v interface{}, t types.Type) *Operand {
 	return &Operand{Type: t, Value: &Constant{v}}
 }
@@ -85,24 +99,25 @@ func (g *ilGen) Register(t types.Type) *Operand {
 	return g.fn.NewRegister(t)
 }
 
-func (g *ilGen) Stmts(node *frontend.Node, blk *Block) (*Operand, *Block) {
-	var last *Operand = nil
-	for _, stmt := range node.Children {
-		last, blk = g.Stmt(stmt, blk)
+func (g *ilGen) Stmts(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
+	for i, stmt := range node.Children {
+		if i + 1 == len(node.Children) {
+			rslt, blk = g.Stmt(stmt, rslt, blk)
+		} else {
+			_, blk = g.Stmt(stmt, nil, blk)
+		}
 	}
-	return last, blk
+	return rslt, blk
 }
 
-func (g *ilGen) Stmt(node *frontend.Node, blk *Block) (*Operand, *Block) {
-	var last *Operand = nil
+func (g *ilGen) Stmt(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
 	switch node.Label {
 	case "Assign":
 		panic("wizard")
 		// return g.Assign(node)
 	default:
-		last, blk = g.Expr(node, nil, blk)
+		return g.Expr(node, rslt, blk)
 	}
-	return last, blk
 }
 
 func (g *ilGen) Expr(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
@@ -205,18 +220,75 @@ func (g *ilGen) If(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *B
 
 	g.Push()
 	var then_last *Operand
-	then_last, then_blk = g.Stmts(then, then_blk)
-	then_blk.Add(NewInst(Ops["MV"], then_last, &UNIT, rslt))
+	then_last, then_blk = g.Stmts(then, rslt, then_blk)
 	then_blk.J(final_blk)
 	g.Pop()
 
 	g.Push()
 	var else_last *Operand
-	else_last, else_blk = g.Stmts(otherwise, else_blk)
-	else_blk.Add(NewInst(Ops["MV"], else_last, &UNIT, rslt))
+	else_last, else_blk = g.Stmts(otherwise, rslt, else_blk)
 	else_blk.J(final_blk)
 	g.Pop()
 
+	if !then_last.Equals(else_last) {
+		panic(fmt.Errorf("should have the same result on both branches"))
+	}
+
 	return rslt, final_blk
+}
+
+func (g *ilGen) BooleanExpr(node *frontend.Node, blk, then, otherwise *Block) (*Block) {
+	switch node.Label {
+	case "TRUE":
+		blk.J(then)
+		return blk
+	case "FALSE":
+		blk.J(otherwise)
+		return blk
+	case "<", "<=", "==", "!=", ">=", ">":
+		return g.CmpOp(node, blk, then, otherwise)
+	case "||":
+		return g.Or(node, blk, then, otherwise)
+	case "&&":
+		return g.And(node, blk, then, otherwise)
+	case "!":
+		return g.Not(node, blk, then, otherwise)
+	default:
+		panic(fmt.Errorf("unexpected node %v", node))
+	}
+}
+
+func (g *ilGen) CmpOp(node *frontend.Node, blk, then, otherwise *Block) (*Block) {
+	a, blk := g.Expr(node.Get(0), nil, blk)
+	b, blk := g.Expr(node.Get(1), nil, blk)
+	var op OpCode
+	switch node.Label {
+	case "<": op = Ops["IFLT"]
+	case "<=": op = Ops["IFLE"]
+	case "==": op = Ops["IFEQ"]
+	case "!=": op = Ops["IFNQ"]
+	case ">=": op = Ops["IFGE"]
+	case ">": op = Ops["IFGT"]
+	default: panic(fmt.Errorf("unexpected node %v", node))
+	}
+	blk.Add(NewInst(op, a, b, Jump(then)))
+	blk.J(otherwise)
+	return blk
+}
+
+func (g *ilGen) Or(node *frontend.Node, blk, then, otherwise *Block) (*Block) {
+	bblk := g.BooleanExpr(node.Get(1), g.fn.AddNewBlock(), then, otherwise)
+	ablk := g.BooleanExpr(node.Get(0), blk, then, bblk)
+	return ablk
+}
+
+func (g *ilGen) And(node *frontend.Node, blk, then, otherwise *Block) (*Block) {
+	bblk := g.BooleanExpr(node.Get(1), g.fn.AddNewBlock(), then, otherwise)
+	ablk := g.BooleanExpr(node.Get(0), blk, bblk, otherwise)
+	return ablk
+}
+
+func (g *ilGen) Not(node *frontend.Node, blk, then, otherwise *Block) (*Block) {
+	return g.BooleanExpr(node.Get(0), blk, otherwise, then)
 }
 

@@ -34,16 +34,17 @@ fibm = fn(add fn(int) fn(int) int) fn(int)int {
 	}
 }
 
-use = "recurse"
+use = "array"
 n = 25
 "using " + use
-x = if use == "array" {
-		fibm(add)(n)
+f = if use == "array" {
+		fibm(add)
 	} else if use == "recurse" {
-		fib(add)(n)
+		fib(add)
 	} else {
-		-1
+		fn(i int) int { -1 }
 	}
+x = f(n)
 x
 if x < 0 {
 	"fail"
