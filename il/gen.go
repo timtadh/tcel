@@ -113,11 +113,47 @@ func (g *ilGen) Stmts(node *frontend.Node, rslt *Operand, blk *Block) (*Operand,
 func (g *ilGen) Stmt(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
 	switch node.Label {
 	case "Assign":
-		panic("wizard")
-		// return g.Assign(node)
+		return g.Assign(node, rslt, blk)
 	default:
 		return g.Expr(node, rslt, blk)
 	}
+}
+
+func (g *ilGen) Assign(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
+	if rslt != nil {
+		panic(fmt.Errorf("cannot propogate the result of an assign"))
+	}
+	expr, blk := g.Expr(node.Get(1), nil, blk)
+	return g.assign(node.Get(0), expr, blk)
+}
+
+func (g *ilGen) assign(node *frontend.Node, expr *Operand, blk *Block) (*Operand, *Block) {
+	if node.Label == "NAME" {
+		name := g.NAME(node)
+		g.syms.Put(name, expr)
+		return &UNIT, blk
+	} else {
+		panic(fmt.Errorf("Array assignments unimplemented"))
+	}
+}
+
+/*
+func (g *ilGen) assignee(node *frontend.Node) (value []interface{}, i int64) {
+	if node.Label == "Index" {
+		item := g.Expr(node.Get(0)).([]interface{})
+		spot := g.Expr(node.Get(1)).(int64)
+		return item, spot
+	} else {
+		panic(fmt.Errorf("Unxpected node %v", node))
+	}
+}
+*/
+
+func (g *ilGen) NAME(node *frontend.Node) (string) {
+	if node.Label != "NAME" {
+		panic(fmt.Errorf("expected a NAME node : %v", node.Serialize(true)))
+	}
+	return node.Value.(string)
 }
 
 func (g *ilGen) Expr(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
@@ -191,7 +227,7 @@ func (g *ilGen) Constant(node *frontend.Node, rslt *Operand, blk *Block) (*Opera
 }
 
 func (g *ilGen) Symbol(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
-	if sym := g.syms.Get(node.Value.(string)); sym == nil {
+	if sym := g.syms.Get(g.NAME(node)); sym == nil {
 		panic(fmt.Errorf("Unknown name, %v", node.Serialize(true)))
 	} else {
 		o := sym.(*Operand)
