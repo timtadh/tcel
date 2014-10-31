@@ -36,6 +36,10 @@ type Evaluator struct {
 	fn     *types.Function
 }
 
+type Box struct {
+	Boxed interface{}
+}
+
 type function frontend.Node
 
 func (self *function) FnType() *types.Function {
@@ -135,6 +139,10 @@ func (e *Evaluator) assign(node *frontend.Node, expr interface{}) (value interfa
 		name := e.NAME(node)
 		e.syms.Put(name, expr)
 		return types.Unit
+	} else if node.Label == "Deref" {
+		box := e.Expr(node.Get(0)).(*Box)
+		box.Boxed = expr
+		return types.Unit
 	}
 	assignee, index := e.assignee(node)
 	assignee[index] = expr
@@ -162,7 +170,7 @@ func (e *Evaluator) Expr(node *frontend.Node) (value interface{}) {
 	switch node.Label {
 	case "+", "-", "*", "/", "%":
 		return e.ArithOp(node)
-	case "Negate":
+	case "Negate", "Deref":
 		return e.UnaryOp(node)
 	case "INT":
 		return node.Value.(int64)
@@ -204,7 +212,7 @@ func (e *Evaluator) New(node *frontend.Node) (interface{}) {
 func (e *Evaluator) _new(node *frontend.Node) (interface{}) {
 	t := node.Type
 	if p, ok := t.(types.Primative); ok {
-		return p.Empty()
+		return &Box{p.Empty()}
 	} else if _, ok := t.(*types.Array); ok {
 		length := e.Expr(node.Get(1)).(int64)
 		arr := make([]interface{}, length)
@@ -215,8 +223,6 @@ func (e *Evaluator) _new(node *frontend.Node) (interface{}) {
 	}
 	panic(fmt.Errorf("Unexpected type in new %v", node.Serialize(true)))
 }
-
-
 
 func (e *Evaluator) BooleanExpr(node *frontend.Node) (bool) {
 	switch node.Label {
@@ -313,6 +319,8 @@ func (e *Evaluator) UnaryOp(node *frontend.Node) (value interface{}) {
 		case "int": return - a.(int64)
 		case "float": return - a.(float64)
 		}
+	} else if node.Label == "Deref" {
+		return a.(*Box).Boxed
 	}
 	panic(fmt.Errorf("unexpected node type in arith op %v", node))
 }

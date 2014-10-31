@@ -10,6 +10,7 @@ type Type interface {
 	String() string
 	Equals(Type) bool
 	Empty() interface{}
+	Unboxed() Type
 }
 
 type Primative string
@@ -23,6 +24,10 @@ type Tuple []Type
 
 type Array struct {
 	Base Type
+}
+
+type Box struct {
+	Boxed Type
 }
 
 var Label Primative = "label"
@@ -45,6 +50,10 @@ func (self Primative) Equals(o Type) bool {
 		return string(t) == string(self)
 	}
 	return false
+}
+
+func (self Primative) Unboxed() Type {
+	return self
 }
 
 func (self Primative) Empty() interface{} {
@@ -88,6 +97,10 @@ func (self *Function) String() string {
 	return fmt.Sprintf("fn(%v)%v", strings.Join(params, ","), self.Returns)
 }
 
+func (self *Function) Unboxed() Type {
+	return self
+}
+
 func (self *Array) Equals(o Type) bool {
 	t, ok := o.(*Array)
 	if !ok {
@@ -102,6 +115,10 @@ func (self *Array) String() string {
 
 func (self *Array) Empty() interface{} {
 	return make([]interface{}, 0)
+}
+
+func (self *Array) Unboxed() Type {
+	return self
 }
 
 func (self Tuple) String() string {
@@ -131,4 +148,30 @@ func (self Tuple) Equals(o Type) bool {
 func (self Tuple) Empty() interface{} {
 	panic("cannot construct an empty tuple yet")
 }
+
+func (self Tuple) Unboxed() Type {
+	return self
+}
+
+func (self *Box) Equals(o Type) bool {
+	t, ok := o.(*Box)
+	if !ok {
+		return false
+	}
+	return self.Boxed.Equals(t.Boxed)
+}
+
+func (self *Box) String() string {
+	return fmt.Sprintf("box(%v)", self.Boxed)
+}
+
+func (self *Box) Empty() interface{} {
+	panic("cannot construct an empty box yet")
+}
+
+func (self *Box) Unboxed() Type {
+	return self.Boxed
+}
+
+
 

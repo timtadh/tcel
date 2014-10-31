@@ -175,7 +175,7 @@ func (g *ilGen) Expr(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, 
 	// case "Index":
 		// return g.Index(node)
 	// case "NEW":
-		// return g.New(node)
+		// return g.New(node, rslt, blk)
 	default:
 		panic(fmt.Errorf("unexpected node %v", node))
 	}
