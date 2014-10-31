@@ -22,7 +22,8 @@ func Generate(node *frontend.Node) (funcs Functions, err error) {
 		}
 	}()
 	g := newIlGen()
-	g.Stmts(node, nil, g.fn.Entry())
+	_, eblk := g.Stmts(node, nil, g.fn.Entry())
+	eblk.Add(NewInst(Ops["EXIT"], &UNIT, &UNIT, &UNIT))
 	return g.funcs, nil
 }
 
@@ -30,7 +31,6 @@ type ilGen struct {
 	syms   *table.SymbolTable
 	types  *table.SymbolTable
 	funcs Functions
-	func_depth uint16
 	fn *Func
 }
 
@@ -66,12 +66,12 @@ func (g *ilGen) NewFunc(t *types.Function) *Func {
 		Type:      t,
 		Blocks:    make(map[string]*Block),
 		BlockList: make([]*Block, 0, 10),
-		Scope:     g.func_depth,
 		g:         g,
 	}
 	if g.fn != nil {
 		f.StaticScope = append(g.fn.StaticScope, g.fn)
 	}
+	f.Scope = uint16(len(f.StaticScope))
 	f.entry = f.AddNewBlock()
 	g.funcs[name] = f
 	return f
@@ -168,14 +168,12 @@ func (g *ilGen) Expr(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, 
 		return g.Symbol(node, rslt, blk)
 	case "If":
 		return g.If(node, rslt, blk)
-	// case "Call":
-		// return g.Call(node)
+	case "Func":
+		return g.Function(node, rslt, blk)
+	case "Call":
+		return g.Call(node, rslt, blk)
 	// case "Index":
 		// return g.Index(node)
-	// case "Func":
-		// return (*function)(node)
-	// case "Params":
-		// return g.Params(node)
 	// case "NEW":
 		// return g.New(node)
 	default:
@@ -326,5 +324,71 @@ func (g *ilGen) And(node *frontend.Node, blk, then, otherwise *Block) (*Block) {
 
 func (g *ilGen) Not(node *frontend.Node, blk, then, otherwise *Block) (*Block) {
 	return g.BooleanExpr(node.Get(0), blk, otherwise, then)
+}
+
+func (g *ilGen) Function(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
+	params := node.Get(0)
+	ret_type := node.Get(1)
+	block := node.Get(2)
+
+	if rslt == nil {
+		rslt = g.Register(node.Type)
+	}
+
+	f := g.NewFunc(node.Type.(*types.Function))
+	blk.Add(NewInst(Ops["IMM"], Call(f), &UNIT, rslt))
+
+	g.Push()
+	defer g.Pop()
+
+	fblk := f.Entry()
+	old_fn := g.fn
+	g.fn = f
+
+	defer func() {
+		g.fn = old_fn
+	}()
+
+	for i, kid := range params.Children {
+		t := kid.Type
+		name := g.NAME(kid.Get(0))
+		reg := g.Register(t)
+		fblk.Add(NewInst(Ops["PRM"], Const(i), &UNIT, reg))
+		g.syms.Put(name, reg)
+	}
+
+	ret, xblk := g.Stmts(block, nil, fblk)
+
+	// here we need to do escape analysis and make closures as appropriate
+
+	if !ret_type.Type.Equals(types.Unit) {
+		xblk.Add(NewInst(Ops["RTRN"], ret, &UNIT, &UNIT))
+	}
+
+	return rslt, blk
+}
+
+func (g *ilGen) Call(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
+	g.Push()
+	defer g.Pop()
+
+	params, blk := g.Params(node.Get(1), blk)
+	callee, blk := g.Expr(node.Get(0), nil, blk)
+
+	if rslt == nil {
+		rslt = g.Register(node.Type)
+	}
+
+	blk.Add(NewInst(Ops["CALL"], callee, Params(params), rslt))
+	return rslt, blk
+}
+
+func (g *ilGen) Params(node *frontend.Node, blk *Block) (prms []*Operand, oblk *Block) {
+	for _, kid := range node.Children {
+		var prm *Operand
+		prm, blk = g.Expr(kid, nil, blk)
+		prms = append(prms, prm)
+	}
+	return prms, blk
 }
 

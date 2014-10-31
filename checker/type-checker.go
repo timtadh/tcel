@@ -457,6 +457,7 @@ func (c *checker) ParamDecls(node *frontend.Node) (typ []types.Type, errors Erro
 		c.syms.Put(name, t)
 		typ = append(typ, t)
 		n.Type = t
+		kid.Type = t
 	}
 	node.Type = types.Unit
 	return typ, nil

@@ -16,6 +16,11 @@ func (funcs Functions) String() string {
 	lines := make([]string, 0, 100)
 	for name, fn := range funcs {
 		lines = append(lines, fmt.Sprintf("%v %v", name, fn.Type))
+		scope := make([]string, 0, len(fn.StaticScope))
+		for _, x := range fn.StaticScope {
+			scope = append(scope, x.Name)
+		}
+		lines = append(lines, fmt.Sprintf("  scope [%v]", strings.Join(scope, ", ")))
 		for _, blk := range fn.BlockList {
 			lines = append(lines, fmt.Sprintf("  %v", blk))
 			for _, i := range blk.Insts {
@@ -254,6 +259,17 @@ type CallArgs struct {
 	Operands []*Operand
 }
 
+func Params(prms []*Operand) *Operand {
+	parts := make([]types.Type, 0, len(prms))
+	for _, prm := range prms {
+		parts = append(parts, prm.Type)
+	}
+	return &Operand{
+		Type: types.Tuple(parts),
+		Value: &CallArgs{Operands: prms},
+	}
+}
+
 func (self *CallArgs) Equals(v Value) bool {
 	if o, is := v.(*CallArgs); is {
 		if len(self.Operands) != len(o.Operands) {
@@ -292,6 +308,13 @@ func (self *UnitValue) Equals(v Value) bool {
 
 type CallTarget struct {
 	Fn  *Func
+}
+
+func Call(fn *Func) *Operand {
+	return &Operand{
+		Type:  types.Label,
+		Value: &CallTarget{Fn:fn},
+	}
 }
 
 func (self *CallTarget) String() string {
@@ -344,6 +367,24 @@ func (self *NativeTarget) Equals(v Value) bool {
 
 type Constant struct {
 	Value interface{}
+}
+
+func Const(c interface{}) *Operand {
+	var t types.Type
+	switch x := c.(type) {
+	case int:
+		t = types.Int
+		c = int64(x)
+	case int64: t = types.Int
+	case float64: t = types.Float
+	case string: t = types.String
+	case bool: t = types.Boolean
+	default: panic(fmt.Errorf("Unexpected constant value %v", c))
+	}
+	return &Operand{
+		Type:  t,
+		Value: &Constant{Value:c},
+	}
 }
 
 func (self *Constant) String() string {
