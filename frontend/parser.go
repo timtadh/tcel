@@ -32,6 +32,7 @@ Term' -> * Unary Term'
 
 Unary -> PostUnary
        | - PostUnary
+       | * PostUnary
 
 PostUnary -> Factor Applies
            | Factor
@@ -344,11 +345,18 @@ func Parse(tokens []*Token) (*Node, error) {
 
 	P["Stmt"] = Alt(SC("Assign"), SC("Expr"), SC("BooleanTerm"))
 
-	P["Assign"] = Concat(SC("Indexed"), SC("="), SC("Expr"))(
-		func (nodes ...*Node) (*Node, *ParseError) {
-			stmts := NewNode("Assign").AddKid(nodes[0]).AddKid(nodes[2])
-			return stmts, nil
-		})
+	P["Assign"] = Alt(
+		Concat(SC("^"), SC("NAME"), SC("="), SC("Expr"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				stmts := NewNode("Assign").AddKid(NewNode("Deref").AddKid(nodes[1])).AddKid(nodes[3])
+				return stmts, nil
+			}),
+		Concat(SC("Indexed"), SC("="), SC("Expr"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				stmts := NewNode("Assign").AddKid(nodes[0]).AddKid(nodes[2])
+				return stmts, nil
+			}),
+	)
 
 	P["Expr"] = Concat(SC("Term"), SC("Expr_"))(
 		func (nodes ...*Node) (*Node, *ParseError) {
@@ -377,6 +385,10 @@ func Parse(tokens []*Token) (*Node, error) {
 		SC("PostUnary"),
 		Concat(SC("-"), SC("PostUnary"))(func (nodes ...*Node) (*Node, *ParseError) {
 			nodes[0].Label = "Negate"
+			return nodes[0].AddKid(nodes[1]), nil
+		}),
+		Concat(SC("^"), SC("PostUnary"))(func (nodes ...*Node) (*Node, *ParseError) {
+			nodes[0].Label = "Deref"
 			return nodes[0].AddKid(nodes[1]), nil
 		}),
 	)

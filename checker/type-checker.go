@@ -53,6 +53,7 @@ func newChecker() *checker {
 	for _, p := range types.Primatives {
 		c.types.Put(string(p), p)
 	}
+	c.syms.Put("unit", types.Unit)
 	return c
 }
 
@@ -120,8 +121,13 @@ func (c *checker) Assign(node *frontend.Node) (errors Errors) {
 }
 
 func (c *checker) Indexed(node *frontend.Node) (errors Errors) {
-	if node.Label == "NAME" {
-		errors = c.TrySymbol(node)
+	if node.Label == "Deref" {
+		errors = c.Symbol(node.Get(0))
+		if len(errors) == 0 {
+			node.Type = node.Get(0).Type.Unboxed()
+		}
+	} else if node.Label == "NAME" {
+		errors = c.TryTopSymbol(node)
 	} else if node.Label == "Index" {
 		errors = append(errors, c.Indexed(node.Get(0))...)
 		errors = append(errors, c.Indexer(node.Get(1))...)
@@ -161,7 +167,7 @@ func (c *checker) Expr(node *frontend.Node) (errors Errors) {
 	switch node.Label {
 	case "+", "-", "*", "/", "%":
 		errors = c.ArithOp(node)
-	case "Negate":
+	case "Negate", "Deref":
 		errors = c.UnaryOp(node)
 	case "INT":
 		node.Type = types.Int
@@ -195,7 +201,11 @@ func (c *checker) New(node *frontend.Node) (errors Errors) {
 	if _, ok := new_type.(*types.Function); ok {
 		return append(errors, fmt.Errorf("Cannot construct a function with new %v", node.Serialize(true)))
 	}
-	node.Type = new_type
+	if _, ok := new_type.(*types.Array); ok {
+		node.Type = new_type
+	} else {
+		node.Type = &types.Box{new_type}
+	}
 	return errors
 }
 
@@ -415,12 +425,14 @@ func (c *checker) ArrayType(node *frontend.Node) (typ types.Type, errors Errors)
 	if err != nil {
 		return nil, err
 	}
-	err = c.Expr(node.Get(1))
-	if err != nil {
-		return nil, err
-	}
-	if !types.Int.Equals(node.Get(1).Type) {
-		return nil, append(errors, fmt.Errorf("Expected an integer size got %v %v", node.Get(1).Type, node.Serialize(true)))
+	if len(node.Children) > 1 {
+		err = c.Expr(node.Get(1))
+		if err != nil {
+			return nil, err
+		}
+		if !types.Int.Equals(node.Get(1).Type) {
+			return nil, append(errors, fmt.Errorf("Expected an integer size got %v %v", node.Get(1).Type, node.Serialize(true)))
+		}
 	}
 	node.Type = &types.Array{
 		Base: base,
@@ -454,9 +466,22 @@ func (c *checker) ParamDecls(node *frontend.Node) (typ []types.Type, errors Erro
 		c.syms.Put(name, t)
 		typ = append(typ, t)
 		n.Type = t
+		kid.Type = t
 	}
 	node.Type = types.Unit
 	return typ, nil
+}
+
+func (c *checker) TryTopSymbol(node *frontend.Node) (errors Errors) {
+	sym, errors := c.NAME(node)
+	if len(errors) > 0 {
+		return errors
+	}
+	if c.syms.TopHas(sym) {
+		e := c.syms.Get(sym)
+		node.Type = e.(types.Type)
+	}
+	return errors
 }
 
 func (c *checker) TrySymbol(node *frontend.Node) (errors Errors) {
@@ -507,11 +532,21 @@ func (c *checker) ArithOp(node *frontend.Node) (errors Errors) {
 func (c *checker) UnaryOp(node *frontend.Node) (errors Errors) {
 	a := node.Children[0]
 	errors = append(errors, c.Expr(a)...)
-	if len(errors) == 0 && !matches(a.Type, types.Int, types.Float) {
-		errors = append(errors, fmt.Errorf("type %v does not support arith ops", a))
-	}
-	if len(errors) == 0 {
-		node.Type = a.Type
+	if node.Label == "Negate" {
+		if len(errors) == 0 && !matches(a.Type, types.Int, types.Float) {
+			errors = append(errors, fmt.Errorf("type %v does not support arith ops", a))
+		}
+		if len(errors) == 0 {
+			node.Type = a.Type
+		}
+	} else if node.Label == "Deref" {
+		if box, is := a.Type.(*types.Box); !is {
+			errors = append(errors, fmt.Errorf("type %v does not support deref ops", a))
+		} else if len(errors) == 0 {
+			node.Type = box.Boxed
+		}
+	} else {
+		return append(errors, fmt.Errorf("Unexpected node %v", node.Serialize(true)))
 	}
 	return errors
 }
@@ -566,7 +601,7 @@ func (c *checker) CmpOp(node *frontend.Node) (errors Errors) {
 		if !a.Type.Equals(b.Type) {
 			errors = append(errors, fmt.Errorf("a, %v, does not agree with b, %v, in types", a, b))
 		}
-		if !matches(a.Type, types.Int, types.Float) {
+		if !matches(a.Type, types.Int, types.Float, types.String) {
 			errors = append(errors, fmt.Errorf("type %v does not support boolean comparison ops", a))
 		}
 	}
