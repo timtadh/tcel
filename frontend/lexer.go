@@ -68,6 +68,7 @@ func init() {
 	}
 	Tokens = []string{
 		"NAME",
+		"BOX",
 		"FN",
 		"IF",
 		"ELSE",
@@ -128,6 +129,7 @@ func Lexer(text, filename string) (*lex.Scanner, error) {
 	lexer.Add([]byte("true"), ctx.Token("TRUE"))
 	lexer.Add([]byte("false"), ctx.Token("FALSE"))
 	lexer.Add([]byte("new"), ctx.Token("NEW"))
+	lexer.Add([]byte("box"), ctx.Token("BOX"))
 
 	lexer.Add([]byte("([a-z]|[A-Z])([a-z]|[A-Z]|[0-9]|_)*"), ctx.TokenValue("NAME"))
 	lexer.Add(

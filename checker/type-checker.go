@@ -386,6 +386,8 @@ func (c *checker) Type(node *frontend.Node) (typ types.Type, errors Errors) {
 		return c.FuncType(node)
 	case "ArrayType":
 		return c.ArrayType(node)
+	case "BoxType":
+		return c.BoxType(node)
 	}
 	return nil, append(errors, fmt.Errorf("Unexpected node label %v", node))
 }
@@ -402,6 +404,16 @@ func (c *checker) TypeName(node *frontend.Node) (typ types.Type, errors Errors) 
 		node.Get(0).Type = node.Type
 	}
 	return node.Type, errors
+}
+
+
+func (c *checker) BoxType(node *frontend.Node) (typ types.Type, errors Errors) {
+	t, errors := c.Type(node.Get(0))
+	if len(errors) == 0 {
+		node.Type = &types.Box{t}
+		return node.Type, errors
+	}
+	return nil, errors
 }
 
 func (c *checker) FuncType(node *frontend.Node) (typ types.Type, errors Errors) {

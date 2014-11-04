@@ -79,6 +79,7 @@ ParamDecls' -> , NAME Type ParamDecls'
 Type -> NAME
       | FN ( TypeParams ) Type
       | [Expr]Type
+      | BOX ( NAME )
 
 TypeParams -> Type TypeParams'
             | e
@@ -535,6 +536,11 @@ func Parse(tokens []*Token) (*Node, error) {
 		Concat(SC("["), SC("]"), SC("Type"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				n := NewNode("ArrayType").AddKid(nodes[2])
+				return n, nil
+			}),
+		Concat(SC("BOX"), SC("("), SC("NAME"), SC(")"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				n := NewNode("BoxType").AddKid(NewNode("TypeName").AddKid(nodes[2]))
 				return n, nil
 			}),
 	)

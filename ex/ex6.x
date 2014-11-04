@@ -1,7 +1,11 @@
-a = new int
-b = new int
-^a = ^a + 5
-^a = ^a - 2
-b = a
-a
-b
+newint = fn (i int) box(int) {
+	a = new int
+	^a = i
+	a
+}
+x = newint(5)
+y = x
+^y
+^x = ^x + 1
+^y
+
