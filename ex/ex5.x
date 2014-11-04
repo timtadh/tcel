@@ -21,10 +21,4 @@ fn(x int, y int) int {
 		x - y
 	}
 }(7, 8)
-a = new [2]int
-a[0] = z
-a[0]
-a
-b = new int
-b + 1
 

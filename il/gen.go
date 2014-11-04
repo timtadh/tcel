@@ -232,7 +232,7 @@ func (g *ilGen) Symbol(node *frontend.Node, rslt *Operand, blk *Block) (*Operand
 		if rslt == nil {
 			return o, blk
 		}
-		blk.Add(NewInst(Ops["IMM"], o, &UNIT, rslt))
+		blk.Add(NewInst(Ops["MV"], o, &UNIT, rslt))
 		return rslt, blk
 	}
 }
