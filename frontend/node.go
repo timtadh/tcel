@@ -14,12 +14,46 @@ type SourceLocation struct {
 	StartLine, StartColumn, EndLine, EndColumn int
 }
 
+func (self *SourceLocation) Join(others ...*SourceLocation) (*SourceLocation, error) {
+	name := self.Filename
+	for _, o := range others {
+		if name != o.Filename {
+			return nil, fmt.Errorf("Cannot join to source locations from different files")
+		}
+	}
+
+	min_start_line := self.StartLine
+	min_start_col := self.StartColumn
+	max_end_line := self.EndLine
+	max_end_col := self.EndColumn
+
+	for _, o := range others {
+		if o.StartLine < min_start_line {
+			min_start_line = o.StartLine
+			min_start_col = o.StartColumn
+		} else if o.StartLine == min_start_line && o.StartColumn < min_start_col {
+			min_start_col = o.StartColumn
+		}
+		if o.EndLine > max_end_line {
+			max_end_line = o.EndLine
+			max_end_col = o.EndColumn
+		} else if o.EndLine == max_end_line && o.EndColumn > max_end_col {
+			max_end_col = o.EndColumn
+		}
+	}
+
+	return &SourceLocation{
+		Filename:name, StartLine:min_start_line, StartColumn:min_start_col,
+		EndLine:max_end_line, EndColumn:max_end_col,
+	}, nil
+}
+
 type Node struct {
 	Label    string
 	Value    interface{}
 	Type     types.Type
 	Children []*Node
-	Location *SourceLocation
+	location *SourceLocation
 }
 
 func NewNode(label string) *Node {
@@ -42,7 +76,7 @@ func NewTokenNode(tok *Token) *Node {
 	return &Node{
 		Label: Tokens[tok.Type],
 		Value: tok.Value,
-		Location: &SourceLocation{
+		location: &SourceLocation{
 			Filename:tok.Filename,
 			StartLine: tok.StartLine,
 			StartColumn: tok.StartColumn,
@@ -100,6 +134,31 @@ func (self *Node) String() string {
 	return fmt.Sprintf("(Node %v %d)", self.Label, len(self.Children))
 }
 
+func (self *Node) Location() *SourceLocation {
+	var locs []*SourceLocation
+	if self.location != nil {
+		locs = append(locs, self.location)
+	}
+	for _, kid := range self.Children {
+		kl := kid.Location()
+		if kl != nil {
+			locs = append(locs, kl)
+		}
+	}
+	if len(locs) == 0 {
+		return nil
+	} else if len(locs) == 1 {
+		return locs[0]
+	}
+	base := locs[0]
+	others := locs[1:]
+	l, e := base.Join(others...)
+	if e != nil {
+		panic(e)
+	}
+	return l
+}
+
 func (self *Node) Serialize(with_loc bool) string {
 	fmt_node := func(n *Node) string {
 		s := ""
@@ -133,8 +192,9 @@ func (self *Node) Serialize(with_loc bool) string {
 			)
 		}
 		if with_loc && n.Location != nil {
+			loc := n.Location()
 			s = fmt.Sprintf("%s %s: (%d-%d)-(%d-%d)", s,
-				n.Location.Filename, n.Location.StartLine, n.Location.StartColumn, n.Location.EndLine, n.Location.EndColumn)
+				loc.Filename, loc.StartLine, loc.StartColumn, loc.EndLine, loc.EndColumn)
 		}
 		return s
 	}
