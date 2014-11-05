@@ -338,7 +338,13 @@ func (c *checker) Function(node *frontend.Node) (errors Errors) {
 
 		last := block.Get(-1)
 		if !f_type.Returns.Equals(last.Type) {
-			return append(errors, fmt.Errorf("Function type does not agree with last expression."))
+			return append(errors,
+				fmt.Errorf(
+					"Function type, %v, does not agree with last expression, %v, at %v",
+					f_type,
+					last.Type,
+					last.Serialize(true),
+				))
 		}
 
 		if len(errors) == 0 {

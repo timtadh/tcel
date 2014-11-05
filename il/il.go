@@ -201,7 +201,7 @@ var Ops = map[string]OpCode{
 	"IFGE":    19,
 	"NEW":     20, // takes size in bytes
 	"GET":     21, // takes a mem buf, (an offset, length pair), and a destination
-	"PUT":     22, // takes an operand, an offset, and a mem buf
+	"PUT":     22, // takes an operand, (an offset, length pair), and a mem buf
 	"SIZE":    23, // takes a mem buf
 }
 
@@ -394,6 +394,29 @@ func (self *Constant) String() string {
 func (self *Constant) Equals(v Value) bool {
 	if o, is := v.(*Constant); is {
 		return reflect.DeepEqual(self.Value, o.Value)
+	}
+	return false
+}
+
+type OffsetLength struct {
+	Offset int
+	Length int
+}
+
+func OffLen(offset, length int) *Operand {
+	return &Operand{
+		Type:  types.Tuple([]types.Type{types.Int, types.Int}),
+		Value: &OffsetLength{offset, length},
+	}
+}
+
+func (self *OffsetLength) String() string {
+	return fmt.Sprintf("(%d,%d)", self.Offset, self.Length)
+}
+
+func (self *OffsetLength) Equals(v Value) bool {
+	if o, is := v.(*OffsetLength); is {
+		return self.Offset == o.Offset && self.Length == o.Length
 	}
 	return false
 }

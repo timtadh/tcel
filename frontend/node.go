@@ -14,6 +14,10 @@ type SourceLocation struct {
 	StartLine, StartColumn, EndLine, EndColumn int
 }
 
+func (self *SourceLocation) String() string {
+	return fmt.Sprintf("(%d-%d)-(%d-%d) in %v",
+		self.StartLine, self.StartColumn, self.EndLine, self.EndColumn, self.Filename)
+}
 func (self *SourceLocation) Join(others ...*SourceLocation) (*SourceLocation, error) {
 	name := self.Filename
 	for _, o := range others {
@@ -135,6 +139,9 @@ func (self *Node) String() string {
 }
 
 func (self *Node) Location() *SourceLocation {
+	if self == nil {
+		return nil
+	}
 	var locs []*SourceLocation
 	if self.location != nil {
 		locs = append(locs, self.location)
@@ -157,6 +164,22 @@ func (self *Node) Location() *SourceLocation {
 		panic(e)
 	}
 	return l
+}
+
+func (self *Node) Annotate(nodes []*Node) *Node {
+	var locs []*SourceLocation
+	for _, n := range nodes {
+		l := n.Location()
+		if l != nil {
+			locs = append(locs, l)
+		}
+	}
+	var e error
+	self.location, e = self.Location().Join(locs...)
+	if e != nil {
+		panic(e)
+	}
+	return self
 }
 
 func (self *Node) Serialize(with_loc bool) string {
@@ -192,9 +215,7 @@ func (self *Node) Serialize(with_loc bool) string {
 			)
 		}
 		if with_loc && n.Location != nil {
-			loc := n.Location()
-			s = fmt.Sprintf("%s %s: (%d-%d)-(%d-%d)", s,
-				loc.Filename, loc.StartLine, loc.StartColumn, loc.EndLine, loc.EndColumn)
+			s = fmt.Sprintf("%s:at %v", s, n.Location())
 		}
 		return s
 	}

@@ -225,7 +225,7 @@ func main() {
 
 	A := parse(L)
 	if stop_at == "ast" {
-		ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(false))))
+		ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(true))))
 		return
 	}
 	
@@ -237,7 +237,7 @@ func main() {
 
 	T := typecheck(A)
 	if stop_at == "typed-ast" {
-		ouf.Write([]byte(fmt.Sprintf("%v\n", T.Serialize(false))))
+		ouf.Write([]byte(fmt.Sprintf("%v\n", T.Serialize(true))))
 		return
 	}
 

@@ -132,6 +132,12 @@ func (g *ilGen) assign(node *frontend.Node, expr *Operand, blk *Block) (*Operand
 		name := g.NAME(node)
 		g.syms.Put(name, expr)
 		return &UNIT, blk
+	} else if node.Label == "Deref" {
+		var sym *Operand
+		sym, blk = g.Symbol(node.Get(0), nil, blk)
+		size := g.primative_size(sym)
+		blk.Add(NewInst(Ops["PUT"], expr, sym, OffLen(0, size)))
+		return &UNIT, blk
 	} else {
 		panic(fmt.Errorf("Array assignments unimplemented"))
 	}
@@ -160,7 +166,7 @@ func (g *ilGen) Expr(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, 
 	switch node.Label {
 	case "+", "-", "*", "/", "%":
 		return g.ArithOp(node, rslt, blk)
-	case "Negate":
+	case "Negate", "Deref":
 		return g.UnaryOp(node, rslt, blk)
 	case "INT", "FLOAT", "STRING":
 		return g.Constant(node, rslt, blk)
@@ -174,8 +180,8 @@ func (g *ilGen) Expr(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, 
 		return g.Call(node, rslt, blk)
 	// case "Index":
 		// return g.Index(node)
-	// case "NEW":
-		// return g.New(node, rslt, blk)
+	case "NEW":
+		return g.New(node, rslt, blk)
 	default:
 		panic(fmt.Errorf("unexpected node %v", node))
 	}
@@ -201,17 +207,21 @@ func (g *ilGen) ArithOp(node *frontend.Node, rslt *Operand, blk *Block) (*Operan
 }
 
 func (g *ilGen) UnaryOp(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
-	if node.Label != "Negate" {
-		panic(fmt.Errorf("Unexpected node %v", node.Label))
-	}
-	t := node.Get(0).Type
-	zero := g.CONST(t.Empty(), t)
-	b, blk := g.Expr(node.Get(0), nil, blk)
+	a, blk := g.Expr(node.Get(0), nil, blk)
 	if rslt == nil {
 		rslt = g.Register(node.Type)
 	}
-	blk.Add(NewInst(Ops["SUB"], zero, b, rslt))
-	return rslt, blk
+	if node.Label == "Negate" {
+		t := node.Get(0).Type
+		zero := g.CONST(t.Empty(), t)
+		blk.Add(NewInst(Ops["SUB"], zero, a, rslt))
+		return rslt, blk
+	} else if node.Label == "Deref" {
+		size := g.primative_size(a)
+		blk.Add(NewInst(Ops["GET"], a, OffLen(0, size), rslt))
+		return rslt, blk
+	}
+	panic(fmt.Errorf("Unexpected node %v", node.Label))
 }
 
 
@@ -390,5 +400,43 @@ func (g *ilGen) Params(node *frontend.Node, blk *Block) (prms []*Operand, oblk *
 		prms = append(prms, prm)
 	}
 	return prms, blk
+}
+
+func (g *ilGen) New(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
+	t := node.Get(0).Type
+	if at, is := t.(*types.Array); is {
+		fmt.Printf("alloc array %v\n%v\n", at, node.Serialize(true))
+	} else if pt, is := t.(types.Primative); is {
+		fmt.Printf("alloc boxed primative %v\n%v\n", pt, node.Serialize(true))
+		return g.new_primative(node, pt, rslt, blk)
+	} else {
+		panic(fmt.Errorf("cannot alloc a\n%v", node.Serialize(true)))
+	}
+	return rslt, blk
+}
+
+func (g *ilGen) primative_size(o *Operand) int {
+	switch t := o.Type.Unboxed().(type) {
+	case types.Primative:
+		switch t {
+		case "int": return 4
+		case "float": return 4
+		}
+	}
+	panic(fmt.Errorf("can't get the size of %v", o))
+}
+
+func (g *ilGen) new_primative(node *frontend.Node, p types.Primative, rslt *Operand, blk *Block) (*Operand, *Block) {
+	size := 0
+	switch p {
+	case "int": size = 4
+	case "float": size = 4
+	default: panic(fmt.Errorf("Cannot alloc a\n%v", node.Serialize(true)))
+	}
+	if rslt == nil {
+		rslt = g.Register(node.Type)
+	}
+	blk.Add(NewInst(Ops["NEW"], Const(size), &UNIT, rslt))
+	return rslt, blk
 }
 

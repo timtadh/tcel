@@ -349,12 +349,12 @@ func Parse(tokens []*Token) (*Node, error) {
 	P["Assign"] = Alt(
 		Concat(SC("^"), SC("NAME"), SC("="), SC("Expr"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				stmts := NewNode("Assign").AddKid(NewNode("Deref").AddKid(nodes[1])).AddKid(nodes[3])
+				stmts := NewNode("Assign").AddKid(NewNode("Deref").AddKid(nodes[1])).AddKid(nodes[3]).Annotate(nodes)
 				return stmts, nil
 			}),
 		Concat(SC("Indexed"), SC("="), SC("Expr"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				stmts := NewNode("Assign").AddKid(nodes[0]).AddKid(nodes[2])
+				stmts := NewNode("Assign").AddKid(nodes[0]).AddKid(nodes[2]).Annotate(nodes)
 				return stmts, nil
 			}),
 	)
@@ -431,12 +431,12 @@ func Parse(tokens []*Token) (*Node, error) {
 
 	P["Apply"] = Concat(SC("("), SC("Params"), SC(")"))(
 		func (nodes ...*Node) (*Node, *ParseError) {
-			return NewNode("Call").AddKid(nodes[1]), nil
+			return NewNode("Call").AddKid(nodes[1].Annotate(nodes)), nil
 		})
 
 	P["Index"] = Concat(SC("["), SC("Expr"), SC("]"))(
 		func (nodes ...*Node) (*Node, *ParseError) {
-			return NewNode("Index").AddKid(nodes[1]), nil
+			return NewNode("Index").AddKid(nodes[1].Annotate(nodes)), nil
 		})
 
 	P["Params"] = Alt(
@@ -446,7 +446,7 @@ func Parse(tokens []*Token) (*Node, error) {
 				if nodes[1] != nil {
 					params.Children = append(params.Children, nodes[1].Children...)
 				}
-				return params, nil
+				return params.Annotate(nodes), nil
 			}),
 		Epsilon(NewNode("Params")),
 	)
@@ -481,14 +481,17 @@ func Parse(tokens []*Token) (*Node, error) {
 	P["New"] = Concat(
 		SC("NEW"), SC("Type"))(
 		func (nodes ...*Node) (*Node, *ParseError) {
-			return nodes[0].AddKid(nodes[1]), nil
+			return nodes[0].AddKid(nodes[1]).Annotate(nodes), nil
 		})
 
 	P["Function"] = Concat(
 		SC("FN"), SC("("), SC("ParamDecls"), SC(")"),
 		SC("Type"), SC("{"), SC("Stmts"), SC("}"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				n := NewNode("Func").AddKid(nodes[2]).AddKid(nodes[4]).AddKid(nodes[6])
+				n := NewNode("Func").
+					 AddKid(nodes[2].Annotate(nodes[1:4])).
+					 AddKid(nodes[4]).
+					 AddKid(nodes[6]).Annotate(nodes)
 				return n, nil
 			})
 
@@ -497,10 +500,10 @@ func Parse(tokens []*Token) (*Node, error) {
 			func (nodes ...*Node) (*Node, *ParseError) {
 				params := NewNode("ParamDecls").AddKid(
 					NewNode("ParamDecl").AddKid(nodes[0]).AddKid(nodes[1]))
-					if nodes[2] != nil {
-						params.Children = append(params.Children, nodes[2].Children...)
-					}
-					return params, nil
+				if nodes[2] != nil {
+					params.Children = append(params.Children, nodes[2].Children...)
+				}
+				return params.Annotate(nodes), nil
 			}),
 		Epsilon(NewNode("ParamDecls")),
 	)
@@ -510,10 +513,10 @@ func Parse(tokens []*Token) (*Node, error) {
 			func (nodes ...*Node) (*Node, *ParseError) {
 				params := NewNode("ParamDecls").AddKid(
 					NewNode("ParamDecl").AddKid(nodes[1]).AddKid(nodes[2]))
-					if nodes[3] != nil {
-						params.Children = append(params.Children, nodes[3].Children...)
-					}
-					return params, nil
+				if nodes[3] != nil {
+					params.Children = append(params.Children, nodes[3].Children...)
+				}
+				return params, nil
 			}),
 		Epsilon(nil),
 	)
@@ -525,22 +528,22 @@ func Parse(tokens []*Token) (*Node, error) {
 			}),
 		Concat(SC("FN"), SC("("), SC("TypeParams"), SC(")"), SC("Type"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				n := NewNode("FuncType").AddKid(nodes[2]).AddKid(nodes[4])
+				n := NewNode("FuncType").AddKid(nodes[2]).AddKid(nodes[4]).Annotate(nodes)
 				return n, nil
 			}),
 		Concat(SC("["), SC("Expr"), SC("]"), SC("Type"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				n := NewNode("ArrayType").AddKid(nodes[3]).AddKid(nodes[1])
+				n := NewNode("ArrayType").AddKid(nodes[3]).AddKid(nodes[1]).Annotate(nodes)
 				return n, nil
 			}),
 		Concat(SC("["), SC("]"), SC("Type"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				n := NewNode("ArrayType").AddKid(nodes[2])
+				n := NewNode("ArrayType").AddKid(nodes[2]).Annotate(nodes)
 				return n, nil
 			}),
 		Concat(SC("BOX"), SC("("), SC("NAME"), SC(")"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
-				n := NewNode("BoxType").AddKid(NewNode("TypeName").AddKid(nodes[2]))
+				n := NewNode("BoxType").AddKid(NewNode("TypeName").AddKid(nodes[2])).Annotate(nodes)
 				return n, nil
 			}),
 	)

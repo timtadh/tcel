@@ -1,4 +1,4 @@
-newint = fn (i int) box(int) {
+newint = fn(i int) box(int) {
 	a = new int
 	^a = i
 	a
