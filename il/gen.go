@@ -375,6 +375,10 @@ func (g *ilGen) Function(node *frontend.Node, rslt *Operand, blk *Block) (*Opera
 		xblk.Add(NewInst(Ops["RTRN"], ret, &UNIT, &UNIT))
 	}
 
+	if _, is := ret_type.Type.(*types.Function); is {
+		panic(fmt.Errorf("Doesn't yet support closures sorry!\n%v", node.Serialize(true)))
+	}
+
 	return rslt, blk
 }
 
@@ -406,8 +410,8 @@ func (g *ilGen) New(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *
 	t := node.Get(0).Type
 	if at, is := t.(*types.Array); is {
 		fmt.Printf("alloc array %v\n%v\n", at, node.Serialize(true))
+		panic(fmt.Errorf("cannot alloc a\n%v", node.Serialize(true)))
 	} else if pt, is := t.(types.Primative); is {
-		fmt.Printf("alloc boxed primative %v\n%v\n", pt, node.Serialize(true))
 		return g.new_primative(node, pt, rslt, blk)
 	} else {
 		panic(fmt.Errorf("cannot alloc a\n%v", node.Serialize(true)))
