@@ -2,8 +2,12 @@
 
 By Tim Henderson (tadh@case.edu)
 
-This is a simple language with a static type checker. It is an interpreted
-expression oriented functional language.  Which features:
+This is a simple language with a static type checker. It is an -interpreted-
+expression oriented functional language. 
+
+(interpreted is a strong word. It now has a semi-functional code generator)
+
+It features:
 
 - First class functions
 - Closures
