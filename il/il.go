@@ -65,7 +65,7 @@ func (self *Func) NewRegister(t types.Type) *Operand {
 	o := &Operand{
 		Type: t,
 		Value: &Register{
-			Id:    uint64(len(self.Registers)),
+			Id:    uint32(len(self.Registers)),
 			Type:  t,
 			Scope: self.Scope,
 		},
@@ -233,6 +233,11 @@ func (self *Operand) String() string {
 	return fmt.Sprintf("%v:%v", self.Value, self.Type)
 }
 
+func (self *Operand) Reg() bool {
+	_, reg := self.Value.(*Register)
+	return reg
+}
+
 type Value interface {
 	Equals(Value) bool
 	String() string // serialization
@@ -240,7 +245,7 @@ type Value interface {
 
 type Register struct {
 	Type  types.Type
-	Id    uint64
+	Id    uint32
 	Scope uint16
 }
 

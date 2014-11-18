@@ -54,6 +54,10 @@ func newChecker() *checker {
 		c.types.Put(string(p), p)
 	}
 	c.syms.Put("unit", types.Unit)
+	c.syms.Put("print_int", &types.Function{
+		Parameters: []types.Type{ types.Type(types.Int) },
+		Returns: types.Unit,
+	})
 	return c
 }
 

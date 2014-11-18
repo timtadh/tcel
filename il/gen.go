@@ -51,6 +51,13 @@ func newIlGen() *ilGen {
 			Returns: types.Unit,
 		},
 	)
+	g.syms.Put("print_int", &Operand{
+		Type: &types.Function{
+			Parameters: []types.Type{ types.Type(types.Int) },
+			Returns: types.Unit,
+		},
+		Value: &NativeTarget{"print_int"},
+	})
 	return g
 }
 

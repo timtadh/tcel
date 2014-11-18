@@ -3,8 +3,11 @@ package main
 import (
 	"os"
 	"io"
-	"fmt"
 	"io/ioutil"
+	"fmt"
+	"os/exec"
+	"syscall"
+	"strings"
 	"runtime"
 	logpkg "log"
 )
@@ -18,6 +21,7 @@ import (
 	"github.com/timtadh/tcel/checker"
 	"github.com/timtadh/tcel/evaluator"
 	"github.com/timtadh/tcel/il"
+	"github.com/timtadh/tcel/x86"
 )
 
 var log *logpkg.Logger
@@ -52,6 +56,29 @@ func Usage(code int) {
         fmt.Fprintln(os.Stderr, "Try -h or --help for help")
     }
     os.Exit(code)
+}
+
+func call(cmd string) (output string, code int) {
+	args := strings.Split(cmd, " ")
+	cmd, err := exec.LookPath(args[0])
+	if err != nil {
+		log.Fatal(err)
+	}
+	c := exec.Command(cmd, args[1:]...)
+	log.Print("> ", cmd, " ", strings.Join(args[1:]," "))
+	o, err := c.CombinedOutput()
+	if err != nil {
+		log.Print(string(o))
+		log.Fatal(err)
+	}
+	if err != nil {
+		msg, ok := err.(*exec.ExitError)
+		if ok {
+			return string(o), msg.Sys().(syscall.WaitStatus).ExitStatus()
+		}
+		log.Fatal(err)
+	}
+	return string(o), 0
 }
 
 func write(X interface{String() string}, f io.Writer) {
@@ -165,13 +192,40 @@ func eval(node *frontend.Node) []interface{} {
 	return values
 }
 
+func x86_gen(I il.Functions) string {
+	log.Print("> compiling intermediate code to x86 32 bit assembly")
+	asm, e := x86.Generate(I)
+	if e != nil {
+		log.Fatal(e)
+	}
+	return asm
+}
+
+func write_lib(lib string) {
+	f, err := os.Create(lib)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	f.Write([]byte(x86.Lib))
+}
+
+func link(input, lib, output string) {
+	log.Print("> assembling and linking using gcc")
+	call("gcc -m32 -c -o lib.o " + lib)
+	defer os.Remove("lib.o")
+	call("gcc -m32 -c -o main.o " + input)
+	defer os.Remove("main.o")
+	call("gcc -m32 -o " + output + " lib.o main.o")
+}
+
 func main() {
 
-	short := "ho:LATI"
+	short := "ho:LATIS"
 	long := []string{
 		"help",
 		"output=",
-		"lex", "ast", "typed-ast", "il",
+		"lex", "ast", "typed-ast", "il", "asm", "eval",
 	}
 
 	args, optargs, err := getopt.GetOpt(os.Args[1:], short, long)
@@ -182,7 +236,7 @@ func main() {
 
 
 	output := ""
-	stop_at := "run"
+	stop_at := "link"
 	for _, oa := range optargs {
 		switch oa.Opt() {
 		case "-h", "--help": Usage(0)
@@ -196,10 +250,24 @@ func main() {
 			stop_at = "typed-ast"
 		case "-I", "--il":
 			stop_at = "il"
+		case "-S", "--asm":
+			stop_at = "asm"
+		case "--eval":
+			stop_at = "eval"
 		}
 	}
 
-	var ouf io.Writer
+	binary := output
+	if stop_at == "link" {
+		if output == "" {
+			binary = "a.out"
+		} else {
+			binary = output
+		}
+		output = "a.s"
+	}
+
+	var ouf io.WriteCloser
 	if output == "" {
 		ouf = os.Stdout
 	} else {
@@ -225,25 +293,45 @@ func main() {
 
 	A := parse(L)
 	if stop_at == "ast" {
-		ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(true))))
-		return
-	}
-	
-	if stop_at == "il" {
-		I := ilgen(A)
-		write(I, ouf)
+		ouf.Write([]byte(fmt.Sprintf("%v\n", A.Serialize(false))))
 		return
 	}
 
-	T := typecheck(A)
 	if stop_at == "typed-ast" {
+		T := typecheck(A)
 		ouf.Write([]byte(fmt.Sprintf("%v\n", T.Serialize(true))))
 		return
 	}
+	
+	if stop_at == "eval" {
+		values := eval(typecheck(A))
+		for _, value := range values {
+			ouf.Write([]byte(fmt.Sprintf("%v\n", value)))
+		}
+	} else {
+		I := ilgen(typecheck(A))
+		if stop_at == "il" {
+			write(I, ouf)
+			return
+		}
 
-	values := eval(T)
-	for _, value := range values {
-		ouf.Write([]byte(fmt.Sprintf("%v\n", value)))
+		asm := x86_gen(I)
+		ouf.Write([]byte(asm))
+
+		if stop_at == "asm" {
+			return
+		}
+
+
+		ouf.Close()
+		defer os.Remove(output)
+
+		fmt.Println(asm)
+
+		lib := "lib.c"
+		write_lib(lib)
+		defer os.Remove(lib)
+		link(output, lib, binary)
 	}
 }
 
