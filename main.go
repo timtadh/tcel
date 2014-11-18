@@ -315,6 +315,7 @@ func main() {
 			return
 		}
 
+		log.Println(I)
 		asm := x86_gen(I)
 		ouf.Write([]byte(asm))
 
@@ -326,7 +327,7 @@ func main() {
 		ouf.Close()
 		defer os.Remove(output)
 
-		fmt.Println(asm)
+		log.Println(asm)
 
 		lib := "lib.c"
 		write_lib(lib)

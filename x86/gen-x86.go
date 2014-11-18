@@ -22,7 +22,6 @@ void print_int(int i) {
 `
 
 func Generate(fns il.Functions) (string, error) {
-	fmt.Println(fns)
 	g := newGen()
 	g.ProgramSetup()
 	err := g.Functions(fns)
@@ -318,6 +317,26 @@ func (g *x86Gen) J(i *il.Inst) error {
 }
 
 func (g *x86Gen) IF(i *il.Inst) error {
-	panic("unimplemented")
+	signed_ops := map[il.OpCode]string{
+		il.Ops["IFEQ"]:"je",
+		il.Ops["IFNE"]:"jne",
+		il.Ops["IFLT"]:"jl",
+		il.Ops["IFLE"]:"jle",
+		il.Ops["IFGT"]:"jg",
+		il.Ops["IFGE"]:"jge",
+	}
+	if i.A.Reg() {
+		g.Load(i.A, "eax")
+	} else {
+		g.Add(fmt.Sprintf("movl $%v, %%eax", g.Value(i.A)))
+	}
+	if i.A.Reg() {
+		g.Load(i.B, "ebx")
+	} else {
+		g.Add(fmt.Sprintf("movl $%v, %%ebx", g.Value(i.B)))
+	}
+	g.Add("cmpl %ebx, %eax")
+	g.Add(fmt.Sprintf("%v %v", signed_ops[i.Op], g.Value(i.R)))
+	return nil
 }
 
