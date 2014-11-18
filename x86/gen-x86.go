@@ -12,6 +12,8 @@ import (
 
 var Lib string = `
 #include <stdio.h>
+#include <error.h>
+#include <errno.h>
 
 extern void print_int(int);
 
@@ -19,17 +21,36 @@ void print_int(int i) {
 	printf("%d\n", i);
 }
 
+int read_stdin_int(char * msg) {
+	int read;
+	printf("%s ", msg);
+	int res = scanf("%d", &read);
+	if (res == EOF) {
+		int e = errno;
+		error(1, e, "EOF on stdin read\n");
+		return 0;
+	} else if (res == 0) {
+		error(1, EIO, "Could not read int from stdin\n");
+		return 0;
+	} else {
+		return read;
+	}
+}
 `
 
 func Generate(fns il.Functions) (string, error) {
 	g := newGen()
 	g.ProgramSetup()
 	err := g.Functions(fns)
+	program := append(g.rodata, g.program...)
+	program = append(program, "")
+	asm := strings.Join(program, "\n")
 	if err != nil {
-		fmt.Println(strings.Join(append(g.program, ""), "\n"))
+		fmt.Println(asm)
 		return "", err
 	}
-	return strings.Join(append(g.program, ""), "\n"), nil
+
+	return asm, nil
 }
 
 type x86Gen struct {
@@ -56,7 +77,7 @@ func (g *x86Gen) roAdd(line string) {
 func (g *x86Gen) String(str string) string {
 	name := fmt.Sprintf("string_%d", len(g.rodata))
 	g.roAdd(fmt.Sprintf("%v:", name))
-	g.roAdd(fmt.Sprintf(".string \"%d\"", str))
+	g.roAdd(fmt.Sprintf(".string \"%v\"", str))
 	return name
 }
 
@@ -257,6 +278,7 @@ func (g *x86Gen) DIV(i *il.Inst) error {
 func (g *x86Gen) MOD(i *il.Inst) error {
 	g.Load(i.A, "eax")
 	g.Load(i.B, "ebx")
+	g.Add("movl $0, %edx")
 	g.Add("idivl %ebx")
 	g.Store("edx", i.R)
 	return nil

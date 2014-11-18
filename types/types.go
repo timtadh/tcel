@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-
 type Type interface {
 	String() string
 	Equals(Type) bool

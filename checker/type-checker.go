@@ -58,6 +58,10 @@ func newChecker() *checker {
 		Parameters: []types.Type{ types.Type(types.Int) },
 		Returns: types.Unit,
 	})
+	c.syms.Put("read_stdin_int", &types.Function{
+		Parameters: []types.Type{ types.Type(types.String) },
+		Returns: types.Int,
+	})
 	return c
 }
 

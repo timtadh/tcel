@@ -58,6 +58,13 @@ func newIlGen() *ilGen {
 		},
 		Value: &NativeTarget{"print_int"},
 	})
+	g.syms.Put("read_stdin_int", &Operand{
+		Type: &types.Function{
+			Parameters: []types.Type{ types.Type(types.String) },
+			Returns: types.Int,
+		},
+		Value: &NativeTarget{"read_stdin_int"},
+	})
 	return g
 }
 
