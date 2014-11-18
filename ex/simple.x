@@ -5,4 +5,4 @@ print_int(if 1 == 2 {
              add(2, 2)
           })
 
-
+print_int(1 + 2 +3)

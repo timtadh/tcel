@@ -81,7 +81,11 @@ func (g *x86Gen) Store(reg string, o *il.Operand) {
 }
 
 func (g *x86Gen) Load(o *il.Operand, reg string) {
-	g.Add(fmt.Sprintf("movl %v, %%%v", g.Location(o), reg))
+	if o.Reg() {
+		g.Add(fmt.Sprintf("movl %v, %%%v", g.Location(o), reg))
+	} else {
+		g.Add(fmt.Sprintf("movl $%v, %%%v", g.Value(o), reg))
+	}
 }
 
 func (g *x86Gen) ProgramSetup() {
@@ -236,7 +240,7 @@ func (g *x86Gen) SUB(i *il.Inst) error {
 func (g *x86Gen) MUL(i *il.Inst) error {
 	g.Load(i.A, "eax")
 	g.Load(i.B, "ebx")
-	g.Add("mull %ebx")
+	g.Add("imull %ebx")
 	g.Store("eax", i.R)
 	return nil
 }
@@ -244,7 +248,8 @@ func (g *x86Gen) MUL(i *il.Inst) error {
 func (g *x86Gen) DIV(i *il.Inst) error {
 	g.Load(i.A, "eax")
 	g.Load(i.B, "ebx")
-	g.Add("divl %ebx")
+	g.Add("movl $0, %edx")
+	g.Add("idivl %ebx")
 	g.Store("eax", i.R)
 	return nil
 }
@@ -252,7 +257,7 @@ func (g *x86Gen) DIV(i *il.Inst) error {
 func (g *x86Gen) MOD(i *il.Inst) error {
 	g.Load(i.A, "eax")
 	g.Load(i.B, "ebx")
-	g.Add("divl %ebx")
+	g.Add("idivl %ebx")
 	g.Store("edx", i.R)
 	return nil
 }
@@ -325,16 +330,8 @@ func (g *x86Gen) IF(i *il.Inst) error {
 		il.Ops["IFGT"]:"jg",
 		il.Ops["IFGE"]:"jge",
 	}
-	if i.A.Reg() {
-		g.Load(i.A, "eax")
-	} else {
-		g.Add(fmt.Sprintf("movl $%v, %%eax", g.Value(i.A)))
-	}
-	if i.A.Reg() {
-		g.Load(i.B, "ebx")
-	} else {
-		g.Add(fmt.Sprintf("movl $%v, %%ebx", g.Value(i.B)))
-	}
+	g.Load(i.A, "eax")
+	g.Load(i.B, "ebx")
 	g.Add("cmpl %ebx, %eax")
 	g.Add(fmt.Sprintf("%v %v", signed_ops[i.Op], g.Value(i.R)))
 	return nil
