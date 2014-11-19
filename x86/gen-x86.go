@@ -12,13 +12,30 @@ import (
 
 var Lib string = `
 #include <stdio.h>
-#include <error.h>
-#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#ifdef __APPLE__
+	#include <sys/errno.h>
+#else
+	#include <errno.h>
+#endif
 
 extern void print_int(int);
+extern void error(int, int, char *);
+extern void read_stdint_int(char *);
 
 void print_int(int i) {
 	printf("%d\n", i);
+}
+
+void error(int exit_code, int error, char * msg) {
+	fprintf(stderr, "%s\n", msg);
+	fprintf(stderr, "%s\n", strerror(error));
+	if (exit_code != 0) {
+		exit(exit_code);
+	} else {
+		return;
+	}
 }
 
 int read_stdin_int(char * msg) {
@@ -111,9 +128,9 @@ func (g *x86Gen) Load(o *il.Operand, reg string) {
 
 func (g *x86Gen) ProgramSetup() {
 	g.Add("")
-	g.Direct(".section .text")
+	g.Direct(".section __TEXT,__text")
 	g.roAdd("")
-	g.roAdd(".section .rodata")
+	g.roAdd(".section __TEXT,__cstring")
 }
 
 func (g *x86Gen) Value(o *il.Operand) string {
@@ -159,8 +176,8 @@ func (g *x86Gen) Functions(fns il.Functions) error {
 
 func (g *x86Gen) Function(fn *il.Func) error {
 	g.Add("")
-	g.Direct(fmt.Sprintf(".global %v", g.Name(fn.Name)))
-	g.Direct(fmt.Sprintf(".type %v @function", g.Name(fn.Name)))
+	g.Direct(fmt.Sprintf(".globl %v", g.Name(fn.Name)))
+	// g.Direct(fmt.Sprintf(".type %v @function", g.Name(fn.Name)))
 	g.Label(fn.Name)
 	g.FnPush(fn)
 	for _, blk := range fn.BlockList {
