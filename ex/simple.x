@@ -10,12 +10,9 @@ add = fn(x int, y int) int {
 	}(y)
 }
 sub = fn(x int, y int) int {
-	x - y
+	fn(a int, b int) int {
+		a + x - y + b
+	}(-4, 4)
 }
 print_int(i)
-print_int(if i % 2 == 0 {
-			i
-			} else {
-			sub(2, add(i, 5))
-			})
-
+print_int(if i % 2 == 0 { i } else { sub(2, add(i, 5)) })
