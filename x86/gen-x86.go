@@ -319,7 +319,8 @@ func (g *x86Gen) MOD(i *il.Inst) error {
 
 func (g *x86Gen) CALL(i *il.Inst) error {
 	args := i.B.Value.(*il.CallArgs)
-	for _, arg := range args.Operands {
+	for x := len(args.Operands)-1; x >= 0; x-- {
+		arg := args.Operands[x]
 		g.PUSH(arg)
 	}
 	if i.A.Reg() {

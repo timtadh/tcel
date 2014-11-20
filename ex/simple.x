@@ -9,10 +9,13 @@ add = fn(x int, y int) int {
 		x + z
 	}(y)
 }
+sub = fn(x int, y int) int {
+	x - y
+}
 print_int(i)
 print_int(if i % 2 == 0 {
-             i
-          } else {
-             add(i, 5)
-          })
+			i
+			} else {
+			sub(2, add(i, 5))
+			})
 
