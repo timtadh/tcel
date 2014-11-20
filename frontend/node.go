@@ -19,6 +19,12 @@ func (self *SourceLocation) String() string {
 		self.StartLine, self.StartColumn, self.EndLine, self.EndColumn, self.Filename)
 }
 func (self *SourceLocation) Join(others ...*SourceLocation) (*SourceLocation, error) {
+	if self == nil && len(others) > 0 {
+		self = others[0]
+		others = others[1:]
+	} else if self == nil && len(others) == 0 {
+		return nil, nil
+	}
 	name := self.Filename
 	for _, o := range others {
 		if name != o.Filename {

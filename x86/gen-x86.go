@@ -40,22 +40,24 @@ int read_stdin_int(char * msg) {
 
 func Generate(fns il.Functions) (string, error) {
 	g := newGen()
-	g.ProgramSetup()
+	g.ProgramSetup(fns)
 	err := g.Functions(fns)
-	program := append(g.rodata, g.program...)
-	program = append(program, "")
+	program := make([]string, len(g.rodata) + len(g.data) + len(g.program) + 1)
+	copy(program, g.rodata)
+	copy(program[len(g.rodata):], g.data)
+	copy(program[len(g.rodata) + len(g.data):], g.program)
 	asm := strings.Join(program, "\n")
 	if err != nil {
 		fmt.Println(asm)
 		return "", err
 	}
-
 	return asm, nil
 }
 
 type x86Gen struct {
 	program []string
-	rodata []string
+	data    []string
+	rodata  []string
 	f       *frame
 }
 
@@ -68,6 +70,10 @@ func newGen() *x86Gen {
 	return &x86Gen{
 		program: make([]string, 0, 100),
 	}
+}
+
+func (g *x86Gen) dAdd(line string) {
+	g.data = append(g.data, line)
 }
 
 func (g *x86Gen) roAdd(line string) {
@@ -109,11 +115,24 @@ func (g *x86Gen) Load(o *il.Operand, reg string) {
 	}
 }
 
-func (g *x86Gen) ProgramSetup() {
+func (g *x86Gen) ProgramSetup(fns il.Functions) {
+	max_scope := uint16(0)
+	for _, fn := range fns {
+		if fn.Scope > max_scope {
+			max_scope = fn.Scope
+		}
+	}
+	max_scope += 1
 	g.Add("")
 	g.Direct(".section .text")
 	g.roAdd("")
 	g.roAdd(".section .rodata")
+	g.dAdd("")
+	g.dAdd(".section .data")
+	for i := uint16(0); i < max_scope; i++ {
+		g.dAdd(fmt.Sprintf("display_%d:", i))
+		g.dAdd(".long 0")
+	}
 }
 
 func (g *x86Gen) Value(o *il.Operand) string {
@@ -141,11 +160,18 @@ func (g *x86Gen) Location(o *il.Operand) string {
 }
 
 func (g *x86Gen) location(r *il.Register) string {
-	if off, has := g.f.locs[r.Id]; r.Scope != g.f.fn.Scope || !has {
-		panic(fmt.Errorf("could not get loc for %v in %v : %v", r, g.f.locs, g.f.fn))
+	if r.Scope < g.f.fn.Scope {
+		g.Add(fmt.Sprintf("movl display_%d, %%esi", r.Scope))
+		return fmt.Sprintf("%d(%%esi)", g.loc(r))
+	} else if off, has := g.f.locs[r.Id]; r.Scope != g.f.fn.Scope || !has {
+		panic(fmt.Errorf("could not get loc for %v in %d %v : %v", r, g.f.fn.Scope, g.f.locs, g.f.fn))
 	} else {
 		return fmt.Sprintf("%d(%%ebp)", off)
 	}
+}
+
+func (g *x86Gen) loc(r *il.Register) int {
+	return -4*int(r.Id) - 8
 }
 
 func (g *x86Gen) Functions(fns il.Functions) error {
@@ -178,14 +204,21 @@ func (g *x86Gen) FnPush(fn *il.Func) {
 	}
 	g.Add("pushl %ebp")
 	g.Add("movl %esp, %ebp")
+	g.Add(fmt.Sprintf("pushl display_%d", fn.Scope))
+	g.Add(fmt.Sprintf("movl %%ebp, display_%d", fn.Scope))
 	g.Add(fmt.Sprintf("subl $%d, %%esp", len(fn.Registers)*4))
 	for i, r := range fn.Registers {
-		g.f.locs[r.Id] = -4*i - 4
+		if uint32(i) != r.Id {
+			panic(fmt.Errorf("register where not in order, %v", fn.Registers))
+		}
+		g.f.locs[r.Id] = g.loc(r)
 		g.Add(fmt.Sprintf("movl $0, %v", g.location(r)))
 	}
 }
 
-func (g *x86Gen) FnPop() {
+func (g *x86Gen) FnPop(fn *il.Func) {
+	g.Add("movl -4(%ebp), %ebx")
+	g.Add(fmt.Sprintf("movl %%ebx, display_%d", fn.Scope))
 	g.Add("movl %ebp, %esp")
 	g.Add("movl (%esp), %ebp")
 	g.Add("addl $4, %esp")
@@ -320,10 +353,8 @@ func (g *x86Gen) PRM(i *il.Inst) error {
 }
 
 func (g *x86Gen) RTRN(i *il.Inst) error {
-	if i.A.Reg() {
-		g.Load(i.A, "eax")
-	}
-	g.FnPop()
+	g.Load(i.A, "eax")
+	g.FnPop(g.f.fn)
 	return nil
 }
 

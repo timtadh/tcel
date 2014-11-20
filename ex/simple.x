@@ -5,12 +5,14 @@ s = if 2 == 2 {
 }
 i = read_stdin_int(s)
 add = fn(x int, y int) int {
-	fn(i int, j int) int { i + j }(x, y)
+	fn(z int) int {
+		x + z
+	}(y)
 }
 print_int(i)
 print_int(if i % 2 == 0 {
              i
           } else {
-             add(i, 1)
+             add(i, 5)
           })
 

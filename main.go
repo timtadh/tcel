@@ -212,11 +212,11 @@ func write_lib(lib string) {
 
 func link(input, lib, output string) {
 	log.Print("> assembling and linking using gcc")
-	call("gcc -m32 -c -o lib.o " + lib)
+	call("gcc -m32 -g -c -o lib.o " + lib)
 	defer os.Remove("lib.o")
-	call("gcc -m32 -c -o main.o " + input)
+	call("gcc -m32 -g -c -o main.o " + input)
 	defer os.Remove("main.o")
-	call("gcc -m32 -o " + output + " lib.o main.o")
+	call("gcc -m32 -g -o " + output + " lib.o main.o")
 }
 
 func main() {
