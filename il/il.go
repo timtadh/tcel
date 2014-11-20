@@ -155,15 +155,15 @@ func (self *Inst) String() string {
 	if self.A.Equals(&UNIT) && self.B.Equals(&UNIT) && self.R.Equals(&UNIT) {
 		return fmt.Sprintf("%-4v", self.Op)
 	} else if self.A.Equals(&UNIT) && self.B.Equals(&UNIT) && !self.R.Equals(&UNIT) {
-		return fmt.Sprintf("%-4v %-31v %v", self.Op, "", self.R)
+		return fmt.Sprintf("%-4v %-41v %v", self.Op, "", self.R)
 	} else if !self.A.Equals(&UNIT) && self.B.Equals(&UNIT) && self.R.Equals(&UNIT) {
 		return fmt.Sprintf("%-4v %v", self.Op, self.A)
 	} else if !self.A.Equals(&UNIT) && self.B.Equals(&UNIT) && !self.R.Equals(&UNIT) {
-		return fmt.Sprintf("%-4v %-31v %v", self.Op, self.A, self.R)
+		return fmt.Sprintf("%-4v %-41v %v", self.Op, self.A, self.R)
 	} else if !self.A.Equals(&UNIT) && !self.B.Equals(&UNIT) && self.R.Equals(&UNIT) {
-		return fmt.Sprintf("%-4v %-15v %v", self.Op, self.A, self.B)
+		return fmt.Sprintf("%-4v %-20v %v", self.Op, self.A, self.B)
 	} else {
-		return fmt.Sprintf("%-4v %-15v %-15v %v", self.Op, self.A, self.B, self.R)
+		return fmt.Sprintf("%-4v %-20v %-20v %v", self.Op, self.A, self.B, self.R)
 	}
 }
 

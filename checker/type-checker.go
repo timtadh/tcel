@@ -206,6 +206,7 @@ func (c *checker) New(node *frontend.Node) (errors Errors) {
 	if err != nil {
 		return append(errors, err...)
 	}
+	errors = c.arraysHaveSize(node.Get(0))
 	if _, ok := new_type.(*types.Function); ok {
 		return append(errors, fmt.Errorf("Cannot construct a function with new %v", node.Serialize(true)))
 	}
@@ -404,6 +405,24 @@ func (c *checker) Type(node *frontend.Node) (typ types.Type, errors Errors) {
 		return c.BoxType(node)
 	}
 	return nil, append(errors, fmt.Errorf("Unexpected node label %v", node))
+}
+
+func (c *checker) arraysHaveSize(node *frontend.Node) (errors Errors) {
+	switch node.Label {
+	case "TypeName":
+		return errors
+	case "FuncType":
+		return errors
+	case "ArrayType":
+		errors = c.arraysHaveSize(node.Get(0))
+		if len(node.Children) == 1 {
+			errors = append(errors, fmt.Errorf("Array specification must have a size here %v", node.Serialize(true)))
+		}
+		return errors
+	case "BoxType":
+		return c.arraysHaveSize(node.Get(0))
+	}
+	return append(errors, fmt.Errorf("Unexpected node label %v", node))
 }
 
 func (c *checker) TypeName(node *frontend.Node) (typ types.Type, errors Errors) {

@@ -147,11 +147,12 @@ func (g *ilGen) assign(node *frontend.Node, expr *Operand, blk *Block) (*Operand
 		g.syms.Put(name, expr)
 		return &UNIT, blk
 	} else if node.Label == "Deref" {
-		var sym *Operand
-		sym, blk = g.Symbol(node.Get(0), nil, blk)
-		size := g.primative_size(sym)
-		blk.Add(NewInst(Ops["PUT"], expr, sym, OffLen(0, size)))
-		return &UNIT, blk
+		panic(fmt.Errorf("deref assign not implemented"))
+		// var sym *Operand
+		// sym, blk = g.Symbol(node.Get(0), nil, blk)
+		// size := g.primative_size(sym)
+		// blk.Add(NewInst(Ops["PUT"], expr, OffLen(0, size), sym))
+		// return &UNIT, blk
 	} else {
 		panic(fmt.Errorf("Array assignments unimplemented"))
 	}
@@ -231,9 +232,10 @@ func (g *ilGen) UnaryOp(node *frontend.Node, rslt *Operand, blk *Block) (*Operan
 		blk.Add(NewInst(Ops["SUB"], zero, a, rslt))
 		return rslt, blk
 	} else if node.Label == "Deref" {
-		size := g.primative_size(a)
-		blk.Add(NewInst(Ops["GET"], a, OffLen(0, size), rslt))
-		return rslt, blk
+		panic(fmt.Errorf("deref not implemented"))
+		// size := g.primative_size(a)
+		// blk.Add(NewInst(Ops["GET"], a, OffLen(0, size), rslt))
+		// return rslt, blk
 	}
 	panic(fmt.Errorf("Unexpected node %v", node.Label))
 }
@@ -421,40 +423,52 @@ func (g *ilGen) Params(node *frontend.Node, blk *Block) (prms []*Operand, oblk *
 }
 
 func (g *ilGen) New(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, *Block) {
-	t := node.Get(0).Type
-	if at, is := t.(*types.Array); is {
-		fmt.Printf("alloc array %v\n%v\n", at, node.Serialize(true))
-		panic(fmt.Errorf("cannot alloc a\n%v", node.Serialize(true)))
-	} else if pt, is := t.(types.Primative); is {
-		return g.new_primative(node, pt, rslt, blk)
-	} else {
-		panic(fmt.Errorf("cannot alloc a\n%v", node.Serialize(true)))
-	}
-	return rslt, blk
-}
-
-func (g *ilGen) primative_size(o *Operand) int {
-	switch t := o.Type.Unboxed().(type) {
-	case types.Primative:
-		switch t {
-		case "int": return 4
-		case "float": return 4
-		}
-	}
-	panic(fmt.Errorf("can't get the size of %v", o))
-}
-
-func (g *ilGen) new_primative(node *frontend.Node, p types.Primative, rslt *Operand, blk *Block) (*Operand, *Block) {
-	size := 0
-	switch p {
-	case "int": size = 4
-	case "float": size = 4
-	default: panic(fmt.Errorf("Cannot alloc a\n%v", node.Serialize(true)))
-	}
+	var size *Operand
+	var components []*Operand
+	size, components, blk = g.sizeof(node.Get(0), nil, blk)
 	if rslt == nil {
 		rslt = g.Register(node.Type)
 	}
-	blk.Add(NewInst(Ops["NEW"], Const(size), &UNIT, rslt))
+	if c, is := size.Value.(*Constant); is {
+		size = Const(c.Value.(int64) + int64(4*len(components)) + 4)
+	} else {
+		blk.Add(NewInst(Ops["ADD"], Const(4*len(components) + 4), size, size))
+	}
+	blk.Add(NewInst(Ops["NEW"], size, &UNIT, rslt))
+	blk.Add(NewInst(Ops["PUT"], size, OffLen(0, 4), rslt))
+	for i := len(components) - 1; i >= 0; i-- {
+		c := components[i]
+		blk.Add(NewInst(Ops["PUT"], c, OffLen(4*(len(components)-i-1) + 4, 4), rslt))
+	}
 	return rslt, blk
+}
+
+func (g *ilGen) sizeof(node *frontend.Node, rslt *Operand, blk *Block) (*Operand, []*Operand, *Block) {
+	switch t := node.Type.(type) {
+	case *types.Array:
+		boxsize, components, blk := g.sizeof(node.Get(0), nil, blk)
+		boxes, blk := g.Expr(node.Get(1), nil, blk)
+		components = append(components, boxes)
+		if boxsizec, is := boxsize.Value.(*Constant); is {
+			size := boxsizec.Value.(int64)
+			if boxesc, is := boxes.Value.(*Constant); is {
+				count := boxesc.Value.(int64)
+				return Const(size*count), components, blk
+			}
+		}
+		if rslt == nil {
+			rslt = g.Register(types.Int)
+		}
+		blk.Add(NewInst(Ops["MUL"], boxsize, boxes, rslt))
+		return rslt, components, blk
+	case types.Primative:
+		switch t {
+		case "int": return Const(4), nil, blk
+		case "float": return Const(4), nil, blk
+		}
+		panic(fmt.Errorf("can't get the size of %v", node.Serialize(true)))
+	default:
+		panic(fmt.Errorf("unexpected type %v", node.Serialize(true)))
+	}
 }
 

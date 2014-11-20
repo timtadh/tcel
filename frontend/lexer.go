@@ -33,7 +33,28 @@ func NewToken(token int, value interface{}, match *machines.Match, filename stri
 }
 
 func (self *Token) String() string {
-	return fmt.Sprintf("'%v' <%v %v>", Tokens[self.Token.Type], self.Token.String(), self.Filename)
+	if string(self.Token.Lexeme) != Tokens[self.Token.Type] {
+		return fmt.Sprintf(
+			"'%v', (token type %v), at position: (%d, %d)-(%d, %d), in file %v",
+			string(self.Token.Lexeme),
+			Tokens[self.Token.Type],
+			self.Token.StartLine,
+			self.Token.StartColumn,
+			self.Token.EndLine,
+			self.Token.EndColumn,
+			self.Filename,
+		)
+	} else {
+		return fmt.Sprintf(
+			"'%v', at position: (%d, %d)-(%d, %d), in file %v",
+			string(self.Token.Lexeme),
+			self.Token.StartLine,
+			self.Token.StartColumn,
+			self.Token.EndLine,
+			self.Token.EndColumn,
+			self.Filename,
+		)
+	}
 }
 
 var Literals []string

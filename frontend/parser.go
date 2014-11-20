@@ -477,9 +477,8 @@ func Parse(tokens []*Token) (*Node, error) {
 			}),
 		)
 
-
 	P["New"] = Concat(
-		SC("NEW"), SC("Type"))(
+		SC("NEW"), SC("NewType"))(
 		func (nodes ...*Node) (*Node, *ParseError) {
 			return nodes[0].AddKid(nodes[1]).Annotate(nodes), nil
 		})
@@ -544,6 +543,18 @@ func Parse(tokens []*Token) (*Node, error) {
 		Concat(SC("BOX"), SC("("), SC("NAME"), SC(")"))(
 			func (nodes ...*Node) (*Node, *ParseError) {
 				n := NewNode("BoxType").AddKid(NewNode("TypeName").AddKid(nodes[2])).Annotate(nodes)
+				return n, nil
+			}),
+	)
+
+	P["NewType"] = Alt(
+		Concat(SC("NAME"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				return NewNode("TypeName").AddKid(nodes[0]), nil
+			}),
+		Concat(SC("["), SC("Expr"), SC("]"), SC("Type"))(
+			func (nodes ...*Node) (*Node, *ParseError) {
+				n := NewNode("ArrayType").AddKid(nodes[3]).AddKid(nodes[1]).Annotate(nodes)
 				return n, nil
 			}),
 	)
