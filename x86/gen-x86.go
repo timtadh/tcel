@@ -16,6 +16,8 @@ var Lib string = `
 #include <errno.h>
 
 extern void print_int(int);
+extern int read_stdin_int(char *);
+extern void print(char *);
 
 void print_int(int i) {
 	printf("%d\n", i);
@@ -35,6 +37,10 @@ int read_stdin_int(char * msg) {
 	} else {
 		return read;
 	}
+}
+
+void print(char * msg) {
+	printf("%s\n", msg);
 }
 `
 
@@ -164,7 +170,10 @@ func (g *x86Gen) location(r *il.Register) string {
 		g.Add(fmt.Sprintf("movl display_%d, %%esi", r.Scope))
 		return fmt.Sprintf("%d(%%esi)", g.loc(r))
 	} else if off, has := g.f.locs[r.Id]; r.Scope != g.f.fn.Scope || !has {
-		panic(fmt.Errorf("could not get loc for %v in %d %v : %v", r, g.f.fn.Scope, g.f.locs, g.f.fn))
+		panic(
+			fmt.Errorf(
+				"could not get loc for %v in %d %v : %v",
+				r, g.f.fn.Scope, g.f.locs, g.f.fn))
 	} else {
 		return fmt.Sprintf("%d(%%ebp)", off)
 	}

@@ -144,14 +144,19 @@ func (g *ilGen) Assign(node *frontend.Node, rslt *Operand, blk *Block) (*Operand
 	if rslt != nil {
 		panic(fmt.Errorf("cannot propogate the result of an assign"))
 	}
-	expr, blk := g.Expr(node.Get(1), nil, blk)
-	return g.assign(node.Get(0), expr, blk)
+	return g.assign(node.Get(0), node.Get(1), blk)
 }
 
-func (g *ilGen) assign(node *frontend.Node, expr *Operand, blk *Block) (*Operand, *Block) {
+func (g *ilGen) assign(node, expr *frontend.Node, blk *Block) (*Operand, *Block) {
 	if node.Label == "NAME" {
 		name := g.NAME(node)
-		g.syms.Put(name, expr)
+		var symbol *Operand;
+		if sym := g.syms.Get(g.NAME(node)); sym != nil {
+			symbol, blk = g.Expr(expr, sym.(*Operand), blk)
+		} else {
+			symbol, blk = g.Expr(expr, nil, blk)
+		}
+		g.syms.Put(name, symbol)
 		return &UNIT, blk
 	} else if node.Label == "Deref" {
 		panic(fmt.Errorf("deref assign not implemented"))
