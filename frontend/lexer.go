@@ -164,7 +164,7 @@ func Lexer(text, filename string) (*lex.Scanner, error) {
 		},
 	)
 	lexer.Add(
-		[]byte("([0-9]*(\\.[0-9]+)?|[0-9]+(\\.[0-9]*)?)((E|e)(\\+|-)?[0-9]+)?"),
+		[]byte("[0-9]*\\.?[0-9]+"),
 		func(scan *lex.Scanner, match *machines.Match)(interface{}, error) {
 			f, err := strconv.ParseFloat(string(match.Bytes), 64)
 			if err != nil {
